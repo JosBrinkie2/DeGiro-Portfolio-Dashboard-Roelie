@@ -1,0 +1,22 @@
+export type AccountName = 'Roel64' | 'RoelPensioen64';
+
+export interface AccountEntry {
+  date: Date;
+  product: string;
+  isin: string;
+  description: string;
+  entryType: 'deposit' | 'withdrawal' | 'other';
+  mutationCurrency: string;
+  mutationAmount: number;
+  balanceCurrency: string;
+  balanceAmount: number;
+  account: AccountName;
+}
+
+export interface AccountSummary {
+  account: AccountName;
+  totalDeposited: number;
+  totalWithdrawn: number;
+  freeCash: number;
+  currentPortfolioValue: number;
+}
