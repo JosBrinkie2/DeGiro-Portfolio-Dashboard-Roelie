@@ -35,6 +35,7 @@ export function useLivePrices() {
       .map((h) => ({
         isin: h.isin,
         exchange: isinExchangeMap[h.isin] ?? '',
+        productName: h.product,
       }));
 
     if (staleIsins.length === 0) return;

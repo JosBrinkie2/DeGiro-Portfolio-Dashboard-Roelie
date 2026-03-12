@@ -59,9 +59,10 @@ export interface QuoteResult {
 // Strategy:
 //   1. Return cached ticker if available.
 //   2. Try the ISIN+suffix candidate directly against Yahoo Finance chart API.
-//   3. If that fails, search Yahoo and pick the result matching the expected suffix.
-//   4. Last resort: return the candidate ticker as-is.
-export async function resolveTicker(isin: string, exchange: string): Promise<string> {
+//   3. If that fails, search Yahoo by ISIN and pick the result matching the expected suffix.
+//   4. If that fails and a product name is available, search Yahoo by name.
+//   5. Last resort: return the candidate ticker as-is.
+export async function resolveTicker(isin: string, exchange: string, productName?: string): Promise<string> {
   const cache = getFromLocalStorage<Record<string, string>>(TICKER_CACHE_KEY) ?? {};
   if (cache[isin]) return cache[isin];
 
@@ -76,36 +77,47 @@ export async function resolveTicker(isin: string, exchange: string): Promise<str
     return candidate;
   }
 
-  // Step 3: fall back to Yahoo search
-  try {
-    const resp = await fetch(
-      `/api/yahoo/v1/finance/search?q=${encodeURIComponent(isin)}&quotesCount=5&newsCount=0`
-    );
-    if (resp.ok) {
+  // Helper: search Yahoo Finance and return the best matching ticker
+  async function searchYahoo(query: string): Promise<string | null> {
+    try {
+      const resp = await fetch(
+        `/api/yahoo/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=5&newsCount=0`
+      );
+      if (!resp.ok) return null;
       const json = await resp.json();
       const quotes: Array<{ symbol: string; quoteType: string }> =
         json?.quoteResponse?.result ?? json?.quotes ?? [];
       const eligible = quotes.filter(
         (q) => q.quoteType === 'ETF' || q.quoteType === 'EQUITY' || q.quoteType === 'MUTUALFUND'
       );
-
-      // Prefer a result whose symbol ends with the expected exchange suffix
       const preferred = suffix
         ? eligible.find((q) => q.symbol.endsWith(suffix))
         : eligible[0];
-      const match = preferred ?? eligible[0];
-
-      if (match?.symbol) {
-        cache[isin] = match.symbol;
-        saveToLocalStorage(TICKER_CACHE_KEY, cache);
-        return match.symbol;
-      }
+      return (preferred ?? eligible[0])?.symbol ?? null;
+    } catch {
+      return null;
     }
-  } catch {
-    // Network error — fall through to candidate
   }
 
-  // Step 4: use candidate as last resort
+  // Step 3: search by ISIN
+  const isinMatch = await searchYahoo(isin);
+  if (isinMatch) {
+    cache[isin] = isinMatch;
+    saveToLocalStorage(TICKER_CACHE_KEY, cache);
+    return isinMatch;
+  }
+
+  // Step 4: search by product name (fallback for ISINs Yahoo doesn't know)
+  if (productName) {
+    const nameMatch = await searchYahoo(productName);
+    if (nameMatch) {
+      cache[isin] = nameMatch;
+      saveToLocalStorage(TICKER_CACHE_KEY, cache);
+      return nameMatch;
+    }
+  }
+
+  // Step 5: use candidate as last resort
   cache[isin] = candidate;
   saveToLocalStorage(TICKER_CACHE_KEY, cache);
   return candidate;
@@ -244,7 +256,7 @@ async function fetchFxRateToEUR(currency: string): Promise<number> {
 
 // Batch fetch with rate limiting (5 per batch, 300ms delay)
 export async function fetchAllPrices(
-  isins: Array<{ isin: string; exchange: string }>,
+  isins: Array<{ isin: string; exchange: string; productName?: string }>,
   onProgress: (isin: string, data: {
     ticker: string;
     priceEUR: number;
@@ -261,9 +273,9 @@ export async function fetchAllPrices(
     const batch = isins.slice(i, i + BATCH_SIZE);
 
     await Promise.all(
-      batch.map(async ({ isin, exchange }) => {
+      batch.map(async ({ isin, exchange, productName }) => {
         try {
-          const ticker = await resolveTicker(isin, exchange);
+          const ticker = await resolveTicker(isin, exchange, productName);
           const [quote, history1Y, history5Day] = await Promise.all([
             fetchQuote(ticker),
             fetchHistory1Y(ticker),
