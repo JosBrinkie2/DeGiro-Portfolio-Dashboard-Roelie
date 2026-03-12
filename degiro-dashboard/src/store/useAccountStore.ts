@@ -4,11 +4,20 @@ import type { Transaction } from '../types/transaction';
 import type { Holding } from '../types/holding';
 import { computeHoldings } from '../parsers/computeHoldings';
 import { computeAccountSummary } from '../parsers/computeAccountSummary';
+import { loadAccountData, saveAccountData } from '../utils/localStorage';
+import { hashAccountEntry, hashTransaction } from '../utils/dedup';
 
 interface AccountData {
   entries: AccountEntry[];
   transactions: Transaction[];
   loaded: boolean;
+}
+
+export interface MergeResult {
+  newEntries: number;
+  skippedEntries: number;
+  newTransactions: number;
+  skippedTransactions: number;
 }
 
 interface AccountStoreState {
@@ -19,19 +28,31 @@ interface AccountStoreState {
     entries: AccountEntry[],
     transactions: Transaction[]
   ) => void;
+  mergeAccountData: (
+    account: AccountName,
+    newEntries: AccountEntry[],
+    newTransactions: Transaction[]
+  ) => MergeResult;
   clearAccount: (account: AccountName) => void;
   getSummary: (account: AccountName) => AccountSummary | null;
   getAllHoldings: () => Holding[];
   getAllTransactions: () => Transaction[];
 }
 
+function hydrateFromStorage(account: AccountName): AccountData {
+  const persisted = loadAccountData(account);
+  if (!persisted) return { entries: [], transactions: [], loaded: false };
+  return { ...persisted, loaded: true };
+}
+
 const emptyData: AccountData = { entries: [], transactions: [], loaded: false };
 
 export const useAccountStore = create<AccountStoreState>((set, get) => ({
-  roel64: emptyData,
-  roelPensioen64: emptyData,
+  roel64: hydrateFromStorage('Roel64'),
+  roelPensioen64: hydrateFromStorage('RoelPensioen64'),
 
   setAccountData: (account, entries, transactions) => {
+    saveAccountData(account, entries, transactions);
     set((state) => ({
       roel64: account === 'Roel64'
         ? { entries, transactions, loaded: true }
@@ -42,7 +63,39 @@ export const useAccountStore = create<AccountStoreState>((set, get) => ({
     }));
   },
 
+  mergeAccountData: (account, newEntries, newTransactions) => {
+    const state = get();
+    const existing = account === 'Roel64' ? state.roel64 : state.roelPensioen64;
+
+    const entryHashes = new Set(existing.entries.map(hashAccountEntry));
+    const txHashes = new Set(existing.transactions.map(hashTransaction));
+
+    const addedEntries = newEntries.filter(e => !entryHashes.has(hashAccountEntry(e)));
+    const addedTxs = newTransactions.filter(t => !txHashes.has(hashTransaction(t)));
+
+    const mergedEntries = [...existing.entries, ...addedEntries];
+    const mergedTxs = [...existing.transactions, ...addedTxs];
+
+    saveAccountData(account, mergedEntries, mergedTxs);
+    set((state) => ({
+      roel64: account === 'Roel64'
+        ? { entries: mergedEntries, transactions: mergedTxs, loaded: true }
+        : state.roel64,
+      roelPensioen64: account === 'RoelPensioen64'
+        ? { entries: mergedEntries, transactions: mergedTxs, loaded: true }
+        : state.roelPensioen64,
+    }));
+
+    return {
+      newEntries: addedEntries.length,
+      skippedEntries: newEntries.length - addedEntries.length,
+      newTransactions: addedTxs.length,
+      skippedTransactions: newTransactions.length - addedTxs.length,
+    };
+  },
+
   clearAccount: (account) => {
+    saveAccountData(account, [], []);
     set((state) => ({
       roel64: account === 'Roel64' ? emptyData : state.roel64,
       roelPensioen64: account === 'RoelPensioen64' ? emptyData : state.roelPensioen64,

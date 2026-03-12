@@ -1,17 +1,19 @@
 import { useState } from 'react';
-import { LayoutDashboard, TrendingUp, Building2 } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, Building2, Upload } from 'lucide-react';
 import clsx from 'clsx';
 import { DashboardPage } from './pages/DashboardPage';
 import { PortfolioPage } from './pages/PortfolioPage';
 import { BankPage } from './pages/BankPage';
+import { UploadPage } from './pages/UploadPage';
 import { useAccountStore } from './store/useAccountStore';
 
-type Page = 'dashboard' | 'portfolio' | 'bank';
+type Page = 'dashboard' | 'portfolio' | 'bank' | 'upload';
 
 const NAV_ITEMS: Array<{ id: Page; label: string; icon: React.FC<{ className?: string }> }> = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'portfolio', label: 'Waardeontwikkeling', icon: TrendingUp },
   { id: 'bank', label: 'Bankrekeningen', icon: Building2 },
+  { id: 'upload', label: 'Uploaden', icon: Upload },
 ];
 
 export default function App() {
@@ -63,6 +65,7 @@ export default function App() {
           {page === 'dashboard' && <DashboardPage />}
           {page === 'portfolio' && <PortfolioPage />}
           {page === 'bank' && <BankPage />}
+          {page === 'upload' && <UploadPage />}
         </div>
       </main>
     </div>

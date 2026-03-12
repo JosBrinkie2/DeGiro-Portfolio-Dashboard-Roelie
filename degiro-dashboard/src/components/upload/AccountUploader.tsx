@@ -4,6 +4,7 @@ import type { AccountName } from '../../types/account';
 import { parseAccountCsv } from '../../parsers/parseAccountCsv';
 import { parseTransactionsCsv } from '../../parsers/parseTransactionsCsv';
 import { useAccountStore } from '../../store/useAccountStore';
+import type { MergeResult } from '../../store/useAccountStore';
 
 interface AccountUploaderProps {
   account: AccountName;
@@ -12,11 +13,7 @@ interface AccountUploaderProps {
 }
 
 export function AccountUploader({ account, label, color }: AccountUploaderProps) {
-  const setAccountData = useAccountStore((s) => s.setAccountData);
-  const clearAccount = useAccountStore((s) => s.clearAccount);
-  const isLoaded = useAccountStore((s) =>
-    account === 'Roel64' ? s.roel64.loaded : s.roelPensioen64.loaded
-  );
+  const mergeAccountData = useAccountStore((s) => s.mergeAccountData);
 
   const [accountFilename, setAccountFilename] = useState<string | null>(null);
   const [transactionsFilename, setTransactionsFilename] = useState<string | null>(null);
@@ -24,13 +21,15 @@ export function AccountUploader({ account, label, color }: AccountUploaderProps)
   const [transactionsCsvText, setTransactionsCsvText] = useState<string | null>(null);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [transactionsError, setTransactionsError] = useState<string | null>(null);
+  const [mergeResult, setMergeResult] = useState<MergeResult | null>(null);
 
   function tryParse(newAccountCsv: string | null, newTransactionsCsv: string | null) {
     if (!newAccountCsv || !newTransactionsCsv) return;
     try {
       const entries = parseAccountCsv(newAccountCsv, account);
       const transactions = parseTransactionsCsv(newTransactionsCsv, account);
-      setAccountData(account, entries, transactions);
+      const result = mergeAccountData(account, entries, transactions);
+      setMergeResult(result);
     } catch (e) {
       console.error('CSV parse error', e);
     }
@@ -38,6 +37,7 @@ export function AccountUploader({ account, label, color }: AccountUploaderProps)
 
   function handleAccountFile(text: string, filename: string) {
     setAccountError(null);
+    setMergeResult(null);
     try {
       parseAccountCsv(text, account); // validate
       setAccountCsvText(text);
@@ -50,6 +50,7 @@ export function AccountUploader({ account, label, color }: AccountUploaderProps)
 
   function handleTransactionsFile(text: string, filename: string) {
     setTransactionsError(null);
+    setMergeResult(null);
     try {
       parseTransactionsCsv(text, account); // validate
       setTransactionsCsvText(text);
@@ -66,22 +67,8 @@ export function AccountUploader({ account, label, color }: AccountUploaderProps)
 
   return (
     <div className="rounded-xl bg-white shadow-sm border border-slate-100 overflow-hidden">
-      <div className={`${headerColor} px-5 py-3 flex items-center justify-between`}>
+      <div className={`${headerColor} px-5 py-3`}>
         <h3 className="font-semibold text-white">{label}</h3>
-        {isLoaded && (
-          <button
-            onClick={() => {
-              clearAccount(account);
-              setAccountCsvText(null);
-              setTransactionsCsvText(null);
-              setAccountFilename(null);
-              setTransactionsFilename(null);
-            }}
-            className="text-xs text-white/70 hover:text-white underline"
-          >
-            Verwijderen
-          </button>
-        )}
       </div>
       <div className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <UploadZone
@@ -99,6 +86,22 @@ export function AccountUploader({ account, label, color }: AccountUploaderProps)
           error={transactionsError}
         />
       </div>
+      {mergeResult && (
+        <div className="px-4 pb-4 text-xs text-slate-500 space-y-0.5">
+          <p>
+            Transacties: <span className="text-green-600 font-medium">{mergeResult.newTransactions} nieuw</span>
+            {mergeResult.skippedTransactions > 0 && (
+              <span className="ml-1">· {mergeResult.skippedTransactions} al aanwezig</span>
+            )}
+          </p>
+          <p>
+            Mutaties: <span className="text-green-600 font-medium">{mergeResult.newEntries} nieuw</span>
+            {mergeResult.skippedEntries > 0 && (
+              <span className="ml-1">· {mergeResult.skippedEntries} al aanwezig</span>
+            )}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
