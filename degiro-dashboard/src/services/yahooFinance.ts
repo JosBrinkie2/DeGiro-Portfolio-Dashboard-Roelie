@@ -248,6 +248,8 @@ export async function fetchAllPrices(
   onProgress: (isin: string, data: {
     ticker: string;
     priceEUR: number;
+    nativeCurrency: string;
+    nativePriceRaw: number;
     history1Y: PricePoint[];
     history5Day: PricePoint[];
   } | null) => void
@@ -272,6 +274,7 @@ export async function fetchAllPrices(
           const currency = quote?.currency ?? 'EUR';
           // Yahoo quotes London securities in GBp (pence) — normalize to GBP first
           const normalizedPrice = currency === 'GBp' ? rawPrice / 100 : rawPrice;
+          const nativeCurrency = currency === 'GBp' ? 'GBP' : currency;
           const fxRate = await fetchFxRateToEUR(currency);
           // fxRate = units of foreign currency per 1 EUR (EURGBP=X ≈ 0.855, EURUSD=X ≈ 1.08)
           // priceEUR = normalizedPrice / fxRate
@@ -280,6 +283,8 @@ export async function fetchAllPrices(
           onProgress(isin, {
             ticker,
             priceEUR,
+            nativeCurrency,
+            nativePriceRaw: normalizedPrice,
             history1Y,
             history5Day,
           });

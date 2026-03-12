@@ -1,10 +1,7 @@
 import type { Holding } from '../../types/holding';
 import { usePriceStore } from '../../store/usePriceStore';
-import { useAccountStore } from '../../store/useAccountStore';
-import { computeVolumeHistory } from '../../parsers/computeHoldings';
 import { formatEuro, formatPct } from '../../utils/currency';
 import { SparklineChart } from './SparklineChart';
-import { VolumeChart } from './VolumeChart';
 import { TrendBadge } from './TrendBadge';
 import { Spinner } from '../ui/Spinner';
 
@@ -14,14 +11,6 @@ interface HoldingRowProps {
 
 export function HoldingRow({ holding }: HoldingRowProps) {
   const priceData = usePriceStore((s) => s.prices[holding.isin]);
-  const getAllTransactions = useAccountStore((s) => s.getAllTransactions);
-  const transactions = getAllTransactions();
-
-  const volumeHistory = computeVolumeHistory(
-    transactions,
-    holding.isin,
-    holding.account
-  );
 
   const price = priceData?.currentPriceEUR ?? 0;
   const currentValue = price * holding.quantity;
@@ -29,6 +18,15 @@ export function HoldingRow({ holding }: HoldingRowProps) {
   const profitLossPct = holding.totalCostEUR > 0 ? profitLoss / holding.totalCostEUR : 0;
   const trend5Day = priceData?.trend5Day ?? 0;
   const ticker = priceData?.ticker ?? null;
+  const nativeCurrency = priceData?.nativeCurrency ?? null;
+  const nativePriceRaw = priceData?.nativePriceRaw ?? null;
+  const isForeignCurrency = nativeCurrency !== null && nativeCurrency !== 'EUR';
+
+  function formatNativePrice(val: number, currency: string): string {
+    if (currency === 'USD') return `$${val.toFixed(2)}`;
+    if (currency === 'GBP') return `£${val.toFixed(2)}`;
+    return val.toFixed(2);
+  }
 
   const isLoading = priceData?.loading ?? false;
   const hasPrice = price > 0;
@@ -66,15 +64,26 @@ export function HoldingRow({ holding }: HoldingRowProps) {
         {formatEuro(holding.averageCostEUR)}
       </td>
 
-      {/* Current Price */}
+      {/* Native price (foreign currency only) */}
+      <td className="px-4 py-3 text-right text-sm text-slate-500 tabular-nums">
+        {isLoading ? (
+          <div className="flex justify-end"><Spinner size="sm" /></div>
+        ) : (
+          <span title={ticker ?? undefined}>
+            {isForeignCurrency && nativePriceRaw !== null
+              ? formatNativePrice(nativePriceRaw, nativeCurrency!)
+              : <span className="text-slate-300">—</span>
+            }
+          </span>
+        )}
+      </td>
+
+      {/* Current Price (EUR) */}
       <td className="px-4 py-3 text-right text-sm text-slate-700 tabular-nums">
         {isLoading ? (
           <div className="flex justify-end"><Spinner size="sm" /></div>
         ) : hasPrice ? (
-          <div>
-            <span>{formatEuro(price)}</span>
-            {ticker && <p className="text-xs text-slate-400 font-mono mt-0.5">{ticker}</p>}
-          </div>
+          <span>{formatEuro(price)}</span>
         ) : (
           <span className="text-slate-300">—</span>
         )}
@@ -110,11 +119,6 @@ export function HoldingRow({ holding }: HoldingRowProps) {
       {/* 1Y Sparkline */}
       <td className="px-4 py-3">
         <SparklineChart data={priceData?.history1Y ?? []} />
-      </td>
-
-      {/* Volume */}
-      <td className="px-4 py-3">
-        <VolumeChart data={volumeHistory} />
       </td>
 
       {/* 5-day trend */}

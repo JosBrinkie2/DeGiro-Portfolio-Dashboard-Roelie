@@ -146,12 +146,12 @@ export function HoldingsTable() {
               <SortHeader label="Product" sortKey="product" current={sortKey} direction={sortDir} onSort={handleSort} />
               <SortHeader label="Aantal" sortKey="quantity" current={sortKey} direction={sortDir} onSort={handleSort} align="right" />
               <SortHeader label="GAK" sortKey="averageCostEUR" current={sortKey} direction={sortDir} onSort={handleSort} align="right" />
+              <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Beurs koers</th>
               <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Huidige koers</th>
               <SortHeader label="Waarde" sortKey="currentValue" current={sortKey} direction={sortDir} onSort={handleSort} align="right" />
               <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">P&L €</th>
               <SortHeader label="P&L %" sortKey="profitLossPct" current={sortKey} direction={sortDir} onSort={handleSort} align="right" />
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">1J grafiek</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Volume</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">5d trend</th>
             </tr>
           </thead>
@@ -171,7 +171,7 @@ export function HoldingsTable() {
           {sorted.length > 0 && (
             <tfoot className="bg-slate-50 border-t-2 border-slate-200">
               <tr>
-                <td colSpan={5} className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <td colSpan={6} className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   Totaal ({sorted.length} posities)
                 </td>
                 <td className="px-4 py-3 text-right text-sm font-bold text-slate-800 tabular-nums">
@@ -195,7 +195,7 @@ export function HoldingsTable() {
                     ? `${totalPnl >= 0 ? '+' : ''}${((totalPnl / totalCost) * 100).toFixed(2)}%`
                     : '—'}
                 </td>
-                <td colSpan={3} />
+                <td colSpan={2} />
               </tr>
             </tfoot>
           )}
