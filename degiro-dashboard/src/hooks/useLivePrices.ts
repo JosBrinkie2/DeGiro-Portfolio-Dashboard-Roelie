@@ -49,6 +49,7 @@ export function useLivePrices() {
       }
       const trend5Day = calc5DayTrend(data.history5Day);
       setPriceData(isin, {
+        ticker: data.ticker,
         currentPriceEUR: data.priceEUR,
         history1Y: data.history1Y,
         history5Day: data.history5Day,

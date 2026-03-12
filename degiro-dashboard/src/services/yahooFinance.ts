@@ -219,6 +219,7 @@ async function fetchFxRateToEUR(currency: string): Promise<number> {
 export async function fetchAllPrices(
   isins: Array<{ isin: string; exchange: string }>,
   onProgress: (isin: string, data: {
+    ticker: string;
     priceEUR: number;
     history1Y: PricePoint[];
     history5Day: PricePoint[];
@@ -250,6 +251,7 @@ export async function fetchAllPrices(
           const priceEUR = fxRate > 0 ? normalizedPrice / fxRate : normalizedPrice;
 
           onProgress(isin, {
+            ticker,
             priceEUR,
             history1Y,
             history5Day,

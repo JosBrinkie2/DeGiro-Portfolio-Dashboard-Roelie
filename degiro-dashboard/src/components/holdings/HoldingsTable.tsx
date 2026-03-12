@@ -59,6 +59,8 @@ export function HoldingsTable() {
   // Re-read from module-level cache; prices subscription drives re-renders when it's populated
   const usdFxRate = getCachedFxRate('USD'); // units of USD per 1 EUR, e.g. 1.08
   const usdToEur = usdFxRate ? (1 / usdFxRate) : null;
+  const gbpFxRate = getCachedFxRate('GBP'); // units of GBP per 1 EUR
+  const gbpToEur = gbpFxRate ? (1 / gbpFxRate) : null;
 
   function handleSort(key: SortKey) {
     if (key === sortKey) {
@@ -119,6 +121,11 @@ export function HoldingsTable() {
               1 USD = {usdToEur.toFixed(4)} EUR
             </span>
           )}
+          {gbpToEur !== null && (
+            <span className="text-xs text-slate-400 tabular-nums">
+              1 GBP = {gbpToEur.toFixed(4)} EUR
+            </span>
+          )}
         </div>
         <select
           value={filterAccount}
@@ -137,7 +144,6 @@ export function HoldingsTable() {
             <tr>
               <SortHeader label="Rekening" sortKey="account" current={sortKey} direction={sortDir} onSort={handleSort} />
               <SortHeader label="Product" sortKey="product" current={sortKey} direction={sortDir} onSort={handleSort} />
-              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Beurs</th>
               <SortHeader label="Aantal" sortKey="quantity" current={sortKey} direction={sortDir} onSort={handleSort} align="right" />
               <SortHeader label="GAK" sortKey="averageCostEUR" current={sortKey} direction={sortDir} onSort={handleSort} align="right" />
               <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Huidige koers</th>
@@ -165,7 +171,7 @@ export function HoldingsTable() {
           {sorted.length > 0 && (
             <tfoot className="bg-slate-50 border-t-2 border-slate-200">
               <tr>
-                <td colSpan={6} className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <td colSpan={5} className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   Totaal ({sorted.length} posities)
                 </td>
                 <td className="px-4 py-3 text-right text-sm font-bold text-slate-800 tabular-nums">

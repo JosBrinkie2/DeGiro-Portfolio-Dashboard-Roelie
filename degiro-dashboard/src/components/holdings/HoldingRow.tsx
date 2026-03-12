@@ -28,6 +28,7 @@ export function HoldingRow({ holding }: HoldingRowProps) {
   const profitLoss = currentValue - holding.totalCostEUR;
   const profitLossPct = holding.totalCostEUR > 0 ? profitLoss / holding.totalCostEUR : 0;
   const trend5Day = priceData?.trend5Day ?? 0;
+  const ticker = priceData?.ticker ?? null;
 
   const isLoading = priceData?.loading ?? false;
   const hasPrice = price > 0;
@@ -53,11 +54,6 @@ export function HoldingRow({ holding }: HoldingRowProps) {
         <p className="text-xs text-slate-400 font-mono mt-0.5">{holding.isin}</p>
       </td>
 
-      {/* Exchange */}
-      <td className="px-4 py-3">
-        <span className="text-xs font-mono text-slate-500">{holding.exchange || '—'}</span>
-      </td>
-
       {/* Quantity */}
       <td className="px-4 py-3 text-right text-sm text-slate-700 tabular-nums">
         {holding.quantity % 1 === 0
@@ -75,7 +71,10 @@ export function HoldingRow({ holding }: HoldingRowProps) {
         {isLoading ? (
           <div className="flex justify-end"><Spinner size="sm" /></div>
         ) : hasPrice ? (
-          formatEuro(price)
+          <div>
+            <span>{formatEuro(price)}</span>
+            {ticker && <p className="text-xs text-slate-400 font-mono mt-0.5">{ticker}</p>}
+          </div>
         ) : (
           <span className="text-slate-300">—</span>
         )}
