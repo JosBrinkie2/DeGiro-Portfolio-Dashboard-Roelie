@@ -1,22 +1,41 @@
 import type { PricePoint } from '../types/holding';
 import { getFromLocalStorage, saveToLocalStorage } from '../utils/localStorage';
 
-// MIC code to Yahoo Finance exchange suffix mapping
+// Exchange code to Yahoo Finance suffix mapping.
+// Primary keys are MIC codes from the Uitvoeringsplaats column (col 5).
+// DeGiro short codes (Beurs, col 4) are kept as fallback.
 const MIC_TO_SUFFIX: Record<string, string> = {
-  XAMS: '.AS', // Amsterdam (Euronext)
+  // MIC codes (Uitvoeringsplaats column — preferred)
+  XAMS: '.AS', // Euronext Amsterdam
   XETR: '.DE', // Frankfurt XETRA
-  XPAR: '.PA', // Paris (Euronext)
+  XETA: '.DE', // Frankfurt XETRA (alternate MIC)
+  XGAT: '.TG', // Tradegate Exchange
+  XPAR: '.PA', // Euronext Paris
   XLON: '.L',  // London Stock Exchange
   XNYS: '',    // NYSE
   XNAS: '',    // NASDAQ
-  XMIL: '.MI', // Milan (Borsa Italiana)
-  XBRU: '.BR', // Brussels (Euronext)
-  XLIS: '.LS', // Lisbon
-  XHEL: '.HE', // Helsinki
-  XSTO: '.ST', // Stockholm
-  XCSE: '.CO', // Copenhagen
-  XOSL: '.OL', // Oslo
-  XSWX: '.SW', // Swiss Exchange
+  XMIL: '.MI', // Borsa Italiana (old)
+  MSEU: '.MI', // Euronext Milan
+  XBRU: '.BR', // Euronext Brussels
+  XLIS: '.LS', // Euronext Lisbon
+  XHEL: '.HE', // Nasdaq Helsinki
+  XSTO: '.ST', // Nasdaq Stockholm
+  XCSE: '.CO', // Nasdaq Copenhagen
+  XOSL: '.OL', // Oslo Børs
+  XSWX: '.SW', // SIX Swiss Exchange
+  SOHO: '',    // NASDAQ dark pool
+  JNST: '',    // NASDAQ dark pool
+  CDED: '',    // US dark pool (NASDAQ/NYSE)
+  // DeGiro short codes (Beurs column — fallback)
+  EAM:  '.AS',
+  TDG:  '.TG',
+  XET:  '.DE',
+  NDQ:  '',
+  NSY:  '',
+  LSE:  '.L',
+  MIL:  '.MI',
+  EBR:  '.BR',
+  EPA:  '.PA',
 };
 
 const TICKER_CACHE_KEY = 'ticker_cache_v1';
@@ -36,20 +55,28 @@ export interface QuoteResult {
   priceInEUR: number;
 }
 
-// Build a candidate ticker from ISIN + exchange MIC code
-export function buildTickerFromISIN(isin: string, exchange: string): string {
-  const suffix = MIC_TO_SUFFIX[exchange?.toUpperCase()] ?? '';
-  return `${isin}${suffix}`;
-}
-
-// Resolve a ticker symbol for an ISIN, using cache or Yahoo search fallback
+// Resolve a ticker symbol for an ISIN.
+// Strategy:
+//   1. Return cached ticker if available.
+//   2. Try the ISIN+suffix candidate directly against Yahoo Finance chart API.
+//   3. If that fails, search Yahoo and pick the result matching the expected suffix.
+//   4. Last resort: return the candidate ticker as-is.
 export async function resolveTicker(isin: string, exchange: string): Promise<string> {
   const cache = getFromLocalStorage<Record<string, string>>(TICKER_CACHE_KEY) ?? {};
   if (cache[isin]) return cache[isin];
 
   const suffix = MIC_TO_SUFFIX[exchange?.toUpperCase()] ?? '';
-  const candidate = buildTickerFromISIN(isin, exchange);
+  const candidate = `${isin}${suffix}`;
 
+  // Step 2: probe the candidate ticker directly
+  const probeResult = await fetchQuote(candidate);
+  if (probeResult) {
+    cache[isin] = candidate;
+    saveToLocalStorage(TICKER_CACHE_KEY, cache);
+    return candidate;
+  }
+
+  // Step 3: fall back to Yahoo search
   try {
     const resp = await fetch(
       `/api/yahoo/v1/finance/search?q=${encodeURIComponent(isin)}&quotesCount=5&newsCount=0`
@@ -65,7 +92,7 @@ export async function resolveTicker(isin: string, exchange: string): Promise<str
       // Prefer a result whose symbol ends with the expected exchange suffix
       const preferred = suffix
         ? eligible.find((q) => q.symbol.endsWith(suffix))
-        : undefined;
+        : eligible[0];
       const match = preferred ?? eligible[0];
 
       if (match?.symbol) {
@@ -78,7 +105,7 @@ export async function resolveTicker(isin: string, exchange: string): Promise<str
     // Network error — fall through to candidate
   }
 
-  // Fall back to candidate ticker
+  // Step 4: use candidate as last resort
   cache[isin] = candidate;
   saveToLocalStorage(TICKER_CACHE_KEY, cache);
   return candidate;
