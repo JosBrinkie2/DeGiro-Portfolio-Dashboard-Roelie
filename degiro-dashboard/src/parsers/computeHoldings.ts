@@ -7,6 +7,7 @@ interface HoldingState {
   isin: string;
   product: string;
   account: AccountName;
+  exchange: string;
   quantity: number;
   averageCostEUR: number; // GAK
   totalCostEUR: number;
@@ -35,6 +36,7 @@ export function computeHoldings(transactions: Transaction[]): Holding[] {
       isin: tx.isin,
       product: tx.product,
       account: tx.account,
+      exchange: tx.exchange,
       quantity: 0,
       averageCostEUR: 0,
       totalCostEUR: 0,
@@ -70,9 +72,12 @@ export function computeHoldings(transactions: Transaction[]): Holding[] {
       }
     }
 
-    // Update product name in case it improved in later transactions
+    // Update product name and exchange from the most recent transaction
     if (tx.product && tx.product.trim() !== '') {
       existing.product = tx.product;
+    }
+    if (tx.exchange && tx.exchange.trim() !== '') {
+      existing.exchange = tx.exchange;
     }
 
     map.set(key, existing);
@@ -85,6 +90,7 @@ export function computeHoldings(transactions: Transaction[]): Holding[] {
       isin: h.isin,
       product: h.product,
       account: h.account,
+      exchange: h.exchange,
       quantity: h.quantity,
       averageCostEUR: h.averageCostEUR,
       totalCostEUR: h.totalCostEUR,

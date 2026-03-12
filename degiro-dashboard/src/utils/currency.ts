@@ -16,7 +16,7 @@ export function parseDutchNumber(raw: string | undefined | null): number {
  * Example: 1234.56 → "€ 1.234,56"
  */
 export function formatEuro(amount: number): string {
-  return new Intl.NumberFormat('nl-NL', {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'EUR',
     minimumFractionDigits: 2,
@@ -26,10 +26,10 @@ export function formatEuro(amount: number): string {
 
 /**
  * Format a number as a compact Euro string for small spaces.
- * Example: 1234.56 → "€1.235"
+ * Example: 1234.56 → "€1,235"
  */
 export function formatEuroCompact(amount: number): string {
-  return new Intl.NumberFormat('nl-NL', {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'EUR',
     minimumFractionDigits: 0,

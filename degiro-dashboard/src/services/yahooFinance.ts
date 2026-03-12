@@ -181,25 +181,34 @@ export function calc5DayTrend(history: PricePoint[]): number {
 
 // Fetch EUR/foreign exchange rate. E.g. currency="USD" → fetch "EURUSD=X" → returns USD per 1 EUR.
 // To convert a USD price to EUR: priceEUR = priceUSD / fxRate
-const fxRateCache: Record<string, { rate: number; fetchedAt: number }> = {};
+export const fxRateCache: Record<string, { rate: number; fetchedAt: number }> = {};
+
+export function getCachedFxRate(currency: string): number | null {
+  const entry = fxRateCache[currency];
+  return entry ? entry.rate : null;
+}
 
 async function fetchFxRateToEUR(currency: string): Promise<number> {
   if (currency === 'EUR') return 1;
 
-  const cached = fxRateCache[currency];
+  // Yahoo Finance uses "GBp" (pence) for London-listed securities.
+  // We normalize to GBP for the FX lookup; the /100 conversion happens on the price side.
+  const normalizedCurrency = currency === 'GBp' ? 'GBP' : currency;
+
+  const cached = fxRateCache[normalizedCurrency];
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_PRICE) {
     return cached.rate;
   }
 
   try {
-    const ticker = `EUR${currency}=X`;
+    const ticker = `EUR${normalizedCurrency}=X`;
     const resp = await fetch(
       `/api/yahoo/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`
     );
     if (!resp.ok) return 1;
     const json = await resp.json();
     const rate: number = json?.chart?.result?.[0]?.meta?.regularMarketPrice ?? 1;
-    fxRateCache[currency] = { rate, fetchedAt: Date.now() };
+    fxRateCache[normalizedCurrency] = { rate, fetchedAt: Date.now() };
     return rate;
   } catch {
     return 1;
@@ -233,10 +242,12 @@ export async function fetchAllPrices(
 
           const rawPrice = quote?.price ?? 0;
           const currency = quote?.currency ?? 'EUR';
+          // Yahoo quotes London securities in GBp (pence) — normalize to GBP first
+          const normalizedPrice = currency === 'GBp' ? rawPrice / 100 : rawPrice;
           const fxRate = await fetchFxRateToEUR(currency);
-          // fxRate = units of foreign currency per 1 EUR
-          // e.g. EURUSD=X = 1.08 means $1.08 per €1 → priceEUR = price / 1.08
-          const priceEUR = fxRate > 0 ? rawPrice / fxRate : rawPrice;
+          // fxRate = units of foreign currency per 1 EUR (EURGBP=X ≈ 0.855, EURUSD=X ≈ 1.08)
+          // priceEUR = normalizedPrice / fxRate
+          const priceEUR = fxRate > 0 ? normalizedPrice / fxRate : normalizedPrice;
 
           onProgress(isin, {
             priceEUR,

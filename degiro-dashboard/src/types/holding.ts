@@ -15,6 +15,7 @@ export interface Holding {
   isin: string;
   product: string;
   account: AccountName;
+  exchange: string; // MIC code, e.g. "XAMS"
   quantity: number;
   averageCostEUR: number; // GAK
   totalCostEUR: number;

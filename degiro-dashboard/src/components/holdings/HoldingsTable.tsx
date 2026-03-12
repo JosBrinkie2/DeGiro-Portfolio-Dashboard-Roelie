@@ -5,6 +5,7 @@ import type { AccountName } from '../../types/account';
 import { useAccountStore } from '../../store/useAccountStore';
 import { usePriceStore } from '../../store/usePriceStore';
 import { formatEuro } from '../../utils/currency';
+import { getCachedFxRate } from '../../services/yahooFinance';
 import { HoldingRow } from './HoldingRow';
 
 type SortKey = 'product' | 'quantity' | 'averageCostEUR' | 'currentValue' | 'profitLossPct' | 'account';
@@ -54,6 +55,10 @@ export function HoldingsTable() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   const holdings = getAllHoldings();
+
+  // Re-read from module-level cache; prices subscription drives re-renders when it's populated
+  const usdFxRate = getCachedFxRate('USD'); // units of USD per 1 EUR, e.g. 1.08
+  const usdToEur = usdFxRate ? (1 / usdFxRate) : null;
 
   function handleSort(key: SortKey) {
     if (key === sortKey) {
@@ -107,7 +112,14 @@ export function HoldingsTable() {
   return (
     <div className="rounded-xl bg-white shadow-sm border border-slate-100 overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-        <h2 className="font-semibold text-slate-800">Portefeuille posities</h2>
+        <div className="flex items-center gap-4">
+          <h2 className="font-semibold text-slate-800">Portefeuille posities</h2>
+          {usdToEur !== null && (
+            <span className="text-xs text-slate-400 tabular-nums">
+              1 USD = {usdToEur.toFixed(4)} EUR
+            </span>
+          )}
+        </div>
         <select
           value={filterAccount}
           onChange={(e) => setFilterAccount(e.target.value as AccountName | 'all')}
@@ -125,6 +137,7 @@ export function HoldingsTable() {
             <tr>
               <SortHeader label="Rekening" sortKey="account" current={sortKey} direction={sortDir} onSort={handleSort} />
               <SortHeader label="Product" sortKey="product" current={sortKey} direction={sortDir} onSort={handleSort} />
+              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Beurs</th>
               <SortHeader label="Aantal" sortKey="quantity" current={sortKey} direction={sortDir} onSort={handleSort} align="right" />
               <SortHeader label="GAK" sortKey="averageCostEUR" current={sortKey} direction={sortDir} onSort={handleSort} align="right" />
               <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Huidige koers</th>
@@ -139,7 +152,7 @@ export function HoldingsTable() {
           <tbody>
             {sorted.length === 0 ? (
               <tr>
-                <td colSpan={11} className="px-4 py-8 text-center text-slate-400 text-sm">
+                <td colSpan={12} className="px-4 py-8 text-center text-slate-400 text-sm">
                   Geen posities gevonden. Upload CSV bestanden om te beginnen.
                 </td>
               </tr>
@@ -152,7 +165,7 @@ export function HoldingsTable() {
           {sorted.length > 0 && (
             <tfoot className="bg-slate-50 border-t-2 border-slate-200">
               <tr>
-                <td colSpan={5} className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <td colSpan={6} className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   Totaal ({sorted.length} posities)
                 </td>
                 <td className="px-4 py-3 text-right text-sm font-bold text-slate-800 tabular-nums">

@@ -53,6 +53,11 @@ export function HoldingRow({ holding }: HoldingRowProps) {
         <p className="text-xs text-slate-400 font-mono mt-0.5">{holding.isin}</p>
       </td>
 
+      {/* Exchange */}
+      <td className="px-4 py-3">
+        <span className="text-xs font-mono text-slate-500">{holding.exchange || '—'}</span>
+      </td>
+
       {/* Quantity */}
       <td className="px-4 py-3 text-right text-sm text-slate-700 tabular-nums">
         {holding.quantity % 1 === 0
