@@ -47,7 +47,7 @@ export async function resolveTicker(isin: string, exchange: string): Promise<str
   const cache = getFromLocalStorage<Record<string, string>>(TICKER_CACHE_KEY) ?? {};
   if (cache[isin]) return cache[isin];
 
-  // Try the direct ISIN+suffix approach first
+  const suffix = MIC_TO_SUFFIX[exchange?.toUpperCase()] ?? '';
   const candidate = buildTickerFromISIN(isin, exchange);
 
   try {
@@ -58,9 +58,16 @@ export async function resolveTicker(isin: string, exchange: string): Promise<str
       const json = await resp.json();
       const quotes: Array<{ symbol: string; quoteType: string }> =
         json?.quoteResponse?.result ?? json?.quotes ?? [];
-      const match = quotes.find(
+      const eligible = quotes.filter(
         (q) => q.quoteType === 'ETF' || q.quoteType === 'EQUITY' || q.quoteType === 'MUTUALFUND'
       );
+
+      // Prefer a result whose symbol ends with the expected exchange suffix
+      const preferred = suffix
+        ? eligible.find((q) => q.symbol.endsWith(suffix))
+        : undefined;
+      const match = preferred ?? eligible[0];
+
       if (match?.symbol) {
         cache[isin] = match.symbol;
         saveToLocalStorage(TICKER_CACHE_KEY, cache);
