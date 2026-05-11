@@ -79,26 +79,74 @@ The application will be available at `http://localhost:5173`
 
 ## Usage
 
+### Trying the App with Dummy Data
+
+The `dummy-data/` folder contains sample CSV files so you can explore the dashboard without a real DeGiro account. **This is fictional data** — names, ISINs, prices and amounts are made up for demonstration purposes only.
+
+| File | Account | Description |
+|------|---------|-------------|
+| `Roel64_Account.csv` | Roel64 | 12 monthly deposits (€5k each), 26 buy orders across 2024 |
+| `Roel64_Transactions.csv` | Roel64 | 26 transactions across 4 products |
+| `RoelPensioen64_Account.csv` | RoelPensioen64 | 4 quarterly deposits (€10–25k), 16 buy orders |
+| `RoelPensioen64_Transactions.csv` | RoelPensioen64 | 12 transactions across 3 funds |
+
+**Products used in the dummy data** (real ISINs, so live prices will load from Yahoo Finance):
+
+| Product | ISIN | Account |
+|---------|------|---------|
+| iShares Core MSCI World | IE00B4L5Y983 | Both |
+| Vanguard FTSE All-World | IE00B3RBWM25 | Roel64 |
+| ASML Holding | NL0010273215 | Roel64 |
+| NVIDIA Corp | US67066G1040 | Roel64 |
+| Vanguard FTSE Developed World | IE00BKX55T58 | RoelPensioen64 |
+| iShares Core Euro Government Bond | IE00B4WXJJ64 | RoelPensioen64 |
+
 ### Uploading Data
 
-1. Export your account overview CSV from DeGiro (`account.csv`)
-2. Export your transactions CSV from DeGiro (`transactions.csv`)
-3. Upload both files for each account using the upload zones on the dashboard
+1. Start the app and navigate to the **Upload** page (via the nav bar)
+2. You will see two upload panels — **Roel64** (blue) and **RoelPensioen64** (violet)
+3. For each account, upload **both** files:
+   - The `_Account.csv` file
+   - The `_Transactions.csv` file
+4. Drag-and-drop the files onto the panel, or click to open a file picker
+5. The dashboard updates immediately — no page reload needed
+
+To use **real DeGiro data** instead:
+1. Log in to DeGiro → Activiteit → Exporteren
+2. Export **Rekeningoverzicht** (account overview) → this becomes your `_Account.csv`
+3. Export **Transacties** (transactions) → this becomes your `_Transactions.csv`
+4. Upload both exports for each account as described above
+
+> **Note:** All data is stored locally in your browser's `localStorage`. Nothing is sent to any server.
 
 ### CSV Format
 
-The application expects the standard DeGiro export format:
+The application expects the standard DeGiro Dutch export format (comma-separated, Dutch number notation):
 
-**account.csv** - Contains:
-- Deposits and withdrawals
-- Balance history
-- Account transactions
+**Account CSV** — columns used:
 
-**transactions.csv** - Contains:
-- Buy/sell transactions
-- Quantities and prices
-- Transaction fees
-- ISIN codes
+| # | Column | Used for |
+|---|--------|----------|
+| 0 | Datum | Entry date |
+| 3 | Product | Product name |
+| 4 | ISIN | Security identifier |
+| 5 | Omschrijving | Entry type (Storting / Terugboeking / etc.) |
+| 7–8 | Mutatie | Mutation currency + amount |
+| 9–10 | Saldo | Balance currency + amount |
+
+**Transactions CSV** — columns used:
+
+| # | Column | Used for |
+|---|--------|----------|
+| 0 | Datum | Transaction date |
+| 2 | Product | Product name |
+| 3 | ISIN | Security identifier |
+| 4 | Beurs | Exchange (fallback for ticker resolution) |
+| 5 | Uitvoeringsplaats | MIC code (primary for ticker resolution) |
+| 6 | Aantal | Quantity |
+| 7–8 | Koers | Price currency + amount |
+| 11 | Waarde EUR | Value in EUR |
+| 15 | Totaal EUR | Total incl. fees (used for GAK calculation) |
 
 ## Project Structure
 
