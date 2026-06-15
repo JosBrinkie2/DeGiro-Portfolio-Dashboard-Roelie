@@ -83,12 +83,16 @@ The application will be available at `http://localhost:5173`
 
 The `dummy-data/` folder contains sample CSV files so you can explore the dashboard without a real DeGiro account. **This is fictional data** — names, ISINs, prices and amounts are made up for demonstration purposes only.
 
+Only the `_Account.csv` file is needed per account — the dashboard derives everything from it.
+
 | File | Account | Description |
 |------|---------|-------------|
 | `Roel64_Account.csv` | Roel64 | 12 monthly deposits (€5k each), 26 buy orders across 2024 |
-| `Roel64_Transactions.csv` | Roel64 | 26 transactions across 4 products |
 | `RoelPensioen64_Account.csv` | RoelPensioen64 | 4 quarterly deposits (€10–25k), 16 buy orders |
-| `RoelPensioen64_Transactions.csv` | RoelPensioen64 | 12 transactions across 3 funds |
+
+> The bundled `public/data/Roel64_Account.csv` is a fuller real-format export (trades carry
+> `Koop X @ Y` detail and Order Ids) so the demo shows live holdings and P&L. The simpler
+> `dummy-data/` account files demonstrate the deposit/withdrawal summary.
 
 **Products used in the dummy data** (real ISINs, so live prices will load from Yahoo Finance):
 
@@ -105,17 +109,16 @@ The `dummy-data/` folder contains sample CSV files so you can explore the dashbo
 
 1. Start the app and navigate to the **Upload** page (via the nav bar)
 2. You will see two upload panels — **Roel64** (blue) and **RoelPensioen64** (violet)
-3. For each account, upload **both** files:
-   - The `_Account.csv` file
-   - The `_Transactions.csv` file
-4. Drag-and-drop the files onto the panel, or click to open a file picker
+3. For each account, upload the single **`_Account.csv`** file (the DeGiro
+   *Rekeningoverzicht*). Everything — deposits/withdrawals, cash balance, holdings, GAK
+   and P&L — is derived from this one file.
+4. Drag-and-drop the file onto the panel, or click to open a file picker
 5. The dashboard updates immediately — no page reload needed
 
 To use **real DeGiro data** instead:
 1. Log in to DeGiro → Activiteit → Exporteren
 2. Export **Rekeningoverzicht** (account overview) → this becomes your `_Account.csv`
-3. Export **Transacties** (transactions) → this becomes your `_Transactions.csv`
-4. Upload both exports for each account as described above
+3. Upload that export for each account as described above (no separate transactions file needed)
 
 > **Note:** All data is stored locally in your browser's `localStorage`. Nothing is sent to any server.
 
@@ -123,30 +126,22 @@ To use **real DeGiro data** instead:
 
 The application expects the standard DeGiro Dutch export format (comma-separated, Dutch number notation):
 
-**Account CSV** — columns used:
+**Account CSV** — the single source for the whole dashboard. Columns used:
 
 | # | Column | Used for |
 |---|--------|----------|
-| 0 | Datum | Entry date |
+| 0 | Datum | Entry / transaction date |
 | 3 | Product | Product name |
-| 4 | ISIN | Security identifier |
-| 5 | Omschrijving | Entry type (Storting / Terugboeking / etc.) |
+| 4 | ISIN | Security identifier (ticker resolution + price lookup) |
+| 5 | Omschrijving | Entry type and trade detail (`Storting`, `Terugboeking`, `Koop 11 @ 40,15 EUR`, …) |
 | 7–8 | Mutatie | Mutation currency + amount |
-| 9–10 | Saldo | Balance currency + amount |
+| 9–10 | Saldo | Balance currency + amount (latest EUR saldo = free cash) |
+| 11 | Order Id | Links a trade to its fee and FX legs, so the EUR cost incl. fees can be reconstructed |
 
-**Transactions CSV** — columns used:
-
-| # | Column | Used for |
-|---|--------|----------|
-| 0 | Datum | Transaction date |
-| 2 | Product | Product name |
-| 3 | ISIN | Security identifier |
-| 4 | Beurs | Exchange (fallback for ticker resolution) |
-| 5 | Uitvoeringsplaats | MIC code (primary for ticker resolution) |
-| 6 | Aantal | Quantity |
-| 7–8 | Koers | Price currency + amount |
-| 11 | Waarde EUR | Value in EUR |
-| 15 | Totaal EUR | Total incl. fees (used for GAK calculation) |
+Buy/sell transactions are reconstructed from the `Koop`/`Verkoop` description lines:
+quantity and price are parsed from the text, and the EUR cost (incl. transaction fees) is the
+absolute net EUR movement of the trade's **Order Id** group — which works for both EUR and
+foreign-currency trades. See `src/parsers/deriveTransactionsFromAccount.ts`.
 
 ## Project Structure
 

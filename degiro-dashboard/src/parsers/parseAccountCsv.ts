@@ -17,14 +17,19 @@ const COL = {
   MUTATIE_AMOUNT: 8,
   SALDO_CURRENCY: 9,
   SALDO_AMOUNT: 10,
+  ORDER_ID: 11,
 } as const;
 
 function detectEntryType(omschrijving: string): AccountEntry['entryType'] {
   const lower = omschrijving.toLowerCase().trim();
-  // Dutch: "Storting", "iDEAL storting"; English: "iDEAL Deposit"
-  if (lower === 'storting' || lower.includes('ideal deposit') || lower.includes('ideal storting')) return 'deposit';
-  // Dutch: "Terugboeking"; English: "Processed Flatex Withdrawal", "flatex terugstorting"
-  if (lower === 'terugboeking' || lower.includes('withdrawal') || lower === 'flatex terugstorting') return 'withdrawal';
+  // Withdrawals first. Dutch: "Terugboeking", "flatex terugstorting";
+  // English: "Processed Flatex Withdrawal".
+  if (lower.includes('terugboeking') || lower.includes('terugstorting') || lower.includes('withdrawal')) {
+    return 'withdrawal';
+  }
+  // Deposits. Dutch: "Storting", "flatex Storting", "iDEAL storting"; English: "iDEAL Deposit".
+  // Exclude "terugstorting" (already handled above) from the broad "storting" match.
+  if (lower.includes('storting') || lower.includes('deposit')) return 'deposit';
   return 'other';
 }
 
@@ -49,6 +54,7 @@ export function parseAccountCsv(csvText: string, account: AccountName): AccountE
       mutationAmount: parseDutchNumber(row[COL.MUTATIE_AMOUNT]),
       balanceCurrency: row[COL.SALDO_CURRENCY] ?? '',
       balanceAmount: parseDutchNumber(row[COL.SALDO_AMOUNT]),
+      orderId: (row[COL.ORDER_ID] ?? '').trim(),
       account,
     }));
 }

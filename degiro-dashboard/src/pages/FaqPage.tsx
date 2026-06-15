@@ -28,8 +28,11 @@ gemiddelde kostprijs = totale kosten / totaal aantal`}
 totale kosten  -= verkocht aantal × gemiddelde kostprijs`}
         </pre>
         <p className="text-sm text-slate-500">
-          De kolom <em>TotaalEUR</em> in het DeGiro-transactiebestand is leidend — dit is het
-          bedrag inclusief transactiekosten dat DeGiro verrekent.
+          De kostprijs wordt afgeleid uit het <em>rekeningoverzicht</em>: per <em>Order Id</em>
+          worden de bij die order horende EUR-regels (de transactie, transactiekosten en
+          eventuele valuta-omrekening) bij elkaar opgeteld. Dit is het bedrag inclusief
+          transactiekosten dat DeGiro verrekent — en werkt ook voor transacties in vreemde
+          valuta.
         </p>
       </div>
     ),
@@ -65,16 +68,19 @@ resultaat %      = totaal resultaat / netto inleg × 100`}
         </pre>
         <ul className="list-disc pl-5 text-sm space-y-1">
           <li>
-            <strong>Gestort</strong>: de optelsom van alle <em>Storting</em>-regels in het
-            rekeningbestand (geld dat op de DeGiro-rekening is gestort).
+            <strong>Gestort</strong>: de optelsom van alle stortingen in het rekeningoverzicht
+            (o.a. <em>Storting</em>, <em>flatex Storting</em> en <em>iDEAL Deposit</em>) — geld
+            dat op de DeGiro-rekening is gestort.
           </li>
           <li>
-            <strong>Terugboekingen</strong>: de optelsom van alle <em>Terugboeking</em>-regels
-            (geld dat van de rekening is opgenomen naar de bank).
+            <strong>Terugboekingen</strong>: het geld dat naar de bank is teruggeboekt
+            (<em>flatex terugstorting</em> / <em>Terugboeking</em>). Tussentijdse{' '}
+            <em>Processed Flatex Withdrawal</em>-regels die elkaar opheffen worden weggestreept,
+            zodat alleen de werkelijke opname overblijft.
           </li>
           <li>
-            <strong>Vrije ruimte</strong>: het actuele cashsaldo zoals vermeld in het
-            rekeningbestand.
+            <strong>Vrije ruimte</strong>: het meest recente EUR-cashsaldo zoals vermeld in het
+            rekeningoverzicht.
           </li>
         </ul>
       </div>
@@ -190,7 +196,7 @@ totale waarde = som(alle posities) + cashsaldo op die datum`}
     answer: (
       <p>
         Bij een aandelensplitsing verandert het aantal aandelen zonder dat er een geldbedrag
-        mee gemoeid is (de <em>TotaalEUR</em> in het transactiebestand is dan 0). De dashboard
+        mee gemoeid is (de mutatie in het rekeningoverzicht is dan 0). De dashboard
         detecteert dit automatisch: het aantal aandelen wordt aangepast, maar de totale
         kostprijs blijft ongewijzigd. De gemiddelde kostprijs per aandeel daalt daardoor
         proportioneel.
@@ -201,20 +207,19 @@ totale waarde = som(alle posities) + cashsaldo op die datum`}
     question: 'Welke CSV-bestanden moet ik uploaden?',
     answer: (
       <div className="space-y-2">
-        <p>Per rekening heb je twee bestanden nodig, te exporteren via DeGiro:</p>
+        <p>Per rekening heb je nog maar <strong>één</strong> bestand nodig:</p>
         <ul className="list-disc pl-5 text-sm space-y-1">
           <li>
-            <strong>Rekeningenoverzicht</strong> — bevat stortingen, opnames en het cashsaldo.
-            Te vinden via: <em>Activiteit → Rekeningoverzicht → Exporteer</em>.
-          </li>
-          <li>
-            <strong>Transacties</strong> — bevat alle aan- en verkooptransacties. Te vinden via:{' '}
-            <em>Activiteit → Transacties → Exporteer</em>.
+            <strong>Rekeningoverzicht</strong> (Account.csv) — bevat stortingen, opnames, het
+            cashsaldo én alle aan- en verkooptransacties. Te vinden via:{' '}
+            <em>Activiteit → Rekeningoverzicht → Exporteer</em>.
           </li>
         </ul>
         <p className="text-sm text-slate-500">
-          Kies bij het exporteren altijd de volledige periode (begin tot vandaag) zodat de
-          gewogen gemiddelde kostprijs correct wordt berekend.
+          De volledige portefeuille (posities, GAK, gestort/terugboekingen en
+          waardeontwikkeling) wordt hieruit afgeleid. Kies bij het exporteren altijd de
+          volledige periode (begin tot vandaag) zodat de gewogen gemiddelde kostprijs correct
+          wordt berekend.
         </p>
       </div>
     ),
