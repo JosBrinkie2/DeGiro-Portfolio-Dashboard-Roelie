@@ -2,8 +2,6 @@ import { useState } from 'react';
 import { UploadZone } from './UploadZone';
 import type { AccountName } from '../../types/account';
 import { parseAccountCsv } from '../../parsers/parseAccountCsv';
-import { parseTransactionsCsv } from '../../parsers/parseTransactionsCsv';
-import { parsePortfolioCsv } from '../../parsers/parsePortfolioCsv';
 import { useAccountStore } from '../../store/useAccountStore';
 import type { MergeResult } from '../../store/useAccountStore';
 
@@ -20,76 +18,30 @@ const ACCOUNT_KEY: Record<AccountName, 'roel64' | 'roelPensioen64'> = {
 
 export function AccountUploader({ account, label, color }: AccountUploaderProps) {
   const mergeAccountData = useAccountStore((s) => s.mergeAccountData);
-  const setPortfolioFreeCash = useAccountStore((s) => s.setPortfolioFreeCash);
   const clearAccount = useAccountStore((s) => s.clearAccount);
   const loaded = useAccountStore((s) => s[ACCOUNT_KEY[account]].loaded);
 
   const [accountFilename, setAccountFilename] = useState<string | null>(null);
-  const [transactionsFilename, setTransactionsFilename] = useState<string | null>(null);
-  const [portfolioFilename, setPortfolioFilename] = useState<string | null>(null);
-  const [accountCsvText, setAccountCsvText] = useState<string | null>(null);
-  const [transactionsCsvText, setTransactionsCsvText] = useState<string | null>(null);
   const [accountError, setAccountError] = useState<string | null>(null);
-  const [transactionsError, setTransactionsError] = useState<string | null>(null);
-  const [portfolioError, setPortfolioError] = useState<string | null>(null);
   const [mergeResult, setMergeResult] = useState<MergeResult | null>(null);
-
-  function tryParse(newAccountCsv: string | null, newTransactionsCsv: string | null) {
-    if (!newAccountCsv && !newTransactionsCsv) return;
-    try {
-      const entries = newAccountCsv ? parseAccountCsv(newAccountCsv, account) : [];
-      const transactions = newTransactionsCsv ? parseTransactionsCsv(newTransactionsCsv, account) : [];
-      const result = mergeAccountData(account, entries, transactions);
-      setMergeResult(result);
-    } catch (e) {
-      console.error('CSV parse error', e);
-    }
-  }
 
   function handleAccountFile(text: string, filename: string) {
     setAccountError(null);
     setMergeResult(null);
     try {
-      parseAccountCsv(text, account); // validate
-      setAccountCsvText(text);
+      const entries = parseAccountCsv(text, account);
+      const result = mergeAccountData(account, entries);
       setAccountFilename(filename);
-      tryParse(text, transactionsCsvText);
-    } catch {
-      setAccountError('Ongeldig rekening.csv bestand');
-    }
-  }
-
-  function handleTransactionsFile(text: string, filename: string) {
-    setTransactionsError(null);
-    setMergeResult(null);
-    try {
-      parseTransactionsCsv(text, account); // validate
-      setTransactionsCsvText(text);
-      setTransactionsFilename(filename);
-      tryParse(accountCsvText, text);
-    } catch {
-      setTransactionsError('Ongeldig transactions.csv bestand');
-    }
-  }
-
-  function handlePortfolioFile(text: string, filename: string) {
-    setPortfolioError(null);
-    try {
-      const { freeCash } = parsePortfolioCsv(text);
-      setPortfolioFreeCash(account, freeCash);
-      setPortfolioFilename(filename);
-    } catch {
-      setPortfolioError('Ongeldig portfolio.csv bestand');
+      setMergeResult(result);
+    } catch (e) {
+      console.error('CSV parse error', e);
+      setAccountError('Ongeldig rekeningoverzicht (Account.csv)');
     }
   }
 
   function handleClear() {
     clearAccount(account);
     setAccountFilename(null);
-    setTransactionsFilename(null);
-    setPortfolioFilename(null);
-    setAccountCsvText(null);
-    setTransactionsCsvText(null);
     setMergeResult(null);
   }
 
@@ -102,23 +54,9 @@ export function AccountUploader({ account, label, color }: AccountUploaderProps)
       <div className={`${headerColor} px-5 py-3`}>
         <h3 className="font-semibold text-white">{label}</h3>
       </div>
-      <div className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="p-4">
         <UploadZone
-          label="portfolio.csv"
-          onFileLoaded={handlePortfolioFile}
-          loaded={!!portfolioFilename}
-          loadedFilename={portfolioFilename ?? undefined}
-          error={portfolioError}
-        />
-        <UploadZone
-          label="transactions.csv"
-          onFileLoaded={handleTransactionsFile}
-          loaded={!!transactionsFilename}
-          loadedFilename={transactionsFilename ?? undefined}
-          error={transactionsError}
-        />
-        <UploadZone
-          label="rekening.csv (optioneel)"
+          label="Account.csv (rekeningoverzicht)"
           onFileLoaded={handleAccountFile}
           loaded={!!accountFilename}
           loadedFilename={accountFilename ?? undefined}
@@ -136,13 +74,7 @@ export function AccountUploader({ account, label, color }: AccountUploaderProps)
         </div>
       )}
       {mergeResult && (
-        <div className="px-4 pb-4 text-xs text-slate-500 space-y-0.5">
-          <p>
-            Transacties: <span className="text-green-600 font-medium">{mergeResult.newTransactions} nieuw</span>
-            {mergeResult.skippedTransactions > 0 && (
-              <span className="ml-1">· {mergeResult.skippedTransactions} al aanwezig</span>
-            )}
-          </p>
+        <div className="px-4 pb-4 text-xs text-slate-500">
           <p>
             Mutaties: <span className="text-green-600 font-medium">{mergeResult.newEntries} nieuw</span>
             {mergeResult.skippedEntries > 0 && (
