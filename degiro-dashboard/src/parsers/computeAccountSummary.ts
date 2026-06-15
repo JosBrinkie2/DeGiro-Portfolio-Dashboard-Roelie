@@ -13,7 +13,15 @@ export function computeAccountSummary(
   account: AccountName,
   transactions: Transaction[] = [],
 ): AccountSummary {
-  const nettoInleg = -transactions.reduce((sum, t) => sum + t.totalEUR, 0);
+  const totalGestort = transactions
+    .filter((t) => t.quantity > 0)
+    .reduce((sum, t) => sum + Math.abs(t.totalEUR), 0);
+
+  const totalTerugboekingen = transactions
+    .filter((t) => t.quantity < 0)
+    .reduce((sum, t) => sum + t.totalEUR, 0);
+
+  const nettoInleg = totalGestort - totalTerugboekingen;
 
   // Find the most recent EUR balance entry (fallback when no Portfolio CSV available)
   const eurEntries = entries
@@ -24,6 +32,8 @@ export function computeAccountSummary(
 
   return {
     account,
+    totalGestort,
+    totalTerugboekingen,
     nettoInleg,
     freeCash,
     currentPortfolioValue: 0, // filled in after live prices are loaded

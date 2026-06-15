@@ -1,4 +1,5 @@
-import { TrendingUp, Wallet, ArrowUpCircle } from 'lucide-react';
+import { useState } from 'react';
+import { TrendingUp, Wallet, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
 import type { AccountSummary } from '../../types/account';
 import { formatEuro } from '../../utils/currency';
 import { Spinner } from '../ui/Spinner';
@@ -31,6 +32,8 @@ interface AccountSummaryCardProps {
 }
 
 export function AccountSummaryCard({ summary, pricesLoading, color }: AccountSummaryCardProps) {
+  const [includeVrijeRuimte, setIncludeVrijeRuimte] = useState(true);
+
   const headerColor = color === 'blue'
     ? 'bg-gradient-to-r from-blue-600 to-blue-500'
     : 'bg-gradient-to-r from-violet-600 to-violet-500';
@@ -46,7 +49,7 @@ export function AccountSummaryCard({ summary, pricesLoading, color }: AccountSum
     );
   }
 
-  const portfolioValue = summary.currentPortfolioValue + summary.freeCash;
+  const portfolioValue = summary.currentPortfolioValue + (includeVrijeRuimte ? summary.freeCash : 0);
   const totalPnl = portfolioValue - summary.nettoInleg;
   const totalPnlPct = summary.nettoInleg > 0 ? (totalPnl / summary.nettoInleg) * 100 : 0;
 
@@ -79,17 +82,38 @@ export function AccountSummaryCard({ summary, pricesLoading, color }: AccountSum
         <Metric
           icon={<ArrowUpCircle className="h-4 w-4 text-green-600" />}
           iconColor="bg-green-50"
-          label="Netto inleg"
-          value={formatEuro(summary.nettoInleg)}
-          sub="Gestort minus opgenomen"
+          label="Totaal gestort"
+          value={formatEuro(summary.totalGestort)}
+          sub="Totaal geïnvesteerd"
         />
         <Metric
-          icon={<Wallet className="h-4 w-4 text-blue-600" />}
-          iconColor="bg-blue-50"
-          label="Vrije ruimte"
-          value={formatEuro(summary.freeCash)}
-          sub="Beschikbaar cash"
+          icon={<ArrowDownCircle className="h-4 w-4 text-orange-500" />}
+          iconColor="bg-orange-50"
+          label="Terugboekingen"
+          value={formatEuro(summary.totalTerugboekingen)}
+          sub="Ontvangen uit verkopen"
         />
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 rounded-lg p-2 bg-blue-50">
+            <Wallet className="h-4 w-4 text-blue-600" />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-slate-500">Vrije ruimte</p>
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeVrijeRuimte}
+                  onChange={(e) => setIncludeVrijeRuimte(e.target.checked)}
+                  className="h-3 w-3 accent-blue-600"
+                />
+                <span className="text-xs text-slate-400">meerekenen</span>
+              </label>
+            </div>
+            <p className="text-base font-semibold text-slate-800">{formatEuro(summary.freeCash)}</p>
+            <p className="text-xs text-slate-400">Beschikbaar cash</p>
+          </div>
+        </div>
         <Metric
           icon={<TrendingUp className="h-4 w-4 text-slate-600" />}
           iconColor="bg-slate-100"
