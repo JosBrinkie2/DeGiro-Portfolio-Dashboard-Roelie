@@ -11,6 +11,7 @@ interface AccountData {
   entries: AccountEntry[];
   transactions: Transaction[];
   loaded: boolean;
+  portfolioFreeCash: number | null;
 }
 
 export interface MergeResult {
@@ -33,6 +34,7 @@ interface AccountStoreState {
     newEntries: AccountEntry[],
     newTransactions: Transaction[]
   ) => MergeResult;
+  setPortfolioFreeCash: (account: AccountName, freeCash: number) => void;
   clearAccount: (account: AccountName) => void;
   getSummary: (account: AccountName) => AccountSummary | null;
   getAllHoldings: () => Holding[];
@@ -41,11 +43,11 @@ interface AccountStoreState {
 
 function hydrateFromStorage(account: AccountName): AccountData {
   const persisted = loadAccountData(account);
-  if (!persisted) return { entries: [], transactions: [], loaded: false };
-  return { ...persisted, loaded: true };
+  if (!persisted) return { entries: [], transactions: [], loaded: false, portfolioFreeCash: null };
+  return { ...persisted, loaded: true, portfolioFreeCash: persisted.portfolioFreeCash ?? null };
 }
 
-const emptyData: AccountData = { entries: [], transactions: [], loaded: false };
+const emptyData: AccountData = { entries: [], transactions: [], loaded: false, portfolioFreeCash: null };
 
 export const useAccountStore = create<AccountStoreState>((set, get) => ({
   roel64: hydrateFromStorage('Roel64'),
@@ -55,10 +57,10 @@ export const useAccountStore = create<AccountStoreState>((set, get) => ({
     saveAccountData(account, entries, transactions);
     set((state) => ({
       roel64: account === 'Roel64'
-        ? { entries, transactions, loaded: true }
+        ? { ...state.roel64, entries, transactions, loaded: true }
         : state.roel64,
       roelPensioen64: account === 'RoelPensioen64'
-        ? { entries, transactions, loaded: true }
+        ? { ...state.roelPensioen64, entries, transactions, loaded: true }
         : state.roelPensioen64,
     }));
   },
@@ -79,10 +81,10 @@ export const useAccountStore = create<AccountStoreState>((set, get) => ({
     saveAccountData(account, mergedEntries, mergedTxs);
     set((state) => ({
       roel64: account === 'Roel64'
-        ? { entries: mergedEntries, transactions: mergedTxs, loaded: true }
+        ? { ...state.roel64, entries: mergedEntries, transactions: mergedTxs, loaded: true }
         : state.roel64,
       roelPensioen64: account === 'RoelPensioen64'
-        ? { entries: mergedEntries, transactions: mergedTxs, loaded: true }
+        ? { ...state.roelPensioen64, entries: mergedEntries, transactions: mergedTxs, loaded: true }
         : state.roelPensioen64,
     }));
 
@@ -92,6 +94,17 @@ export const useAccountStore = create<AccountStoreState>((set, get) => ({
       newTransactions: addedTxs.length,
       skippedTransactions: newTransactions.length - addedTxs.length,
     };
+  },
+
+  setPortfolioFreeCash: (account, freeCash) => {
+    set((state) => ({
+      roel64: account === 'Roel64'
+        ? { ...state.roel64, portfolioFreeCash: freeCash, loaded: true }
+        : state.roel64,
+      roelPensioen64: account === 'RoelPensioen64'
+        ? { ...state.roelPensioen64, portfolioFreeCash: freeCash, loaded: true }
+        : state.roelPensioen64,
+    }));
   },
 
   clearAccount: (account) => {
@@ -106,7 +119,11 @@ export const useAccountStore = create<AccountStoreState>((set, get) => ({
     const { roel64, roelPensioen64 } = get();
     const data = account === 'Roel64' ? roel64 : roelPensioen64;
     if (!data.loaded) return null;
-    return computeAccountSummary(data.entries, account);
+    const summary = computeAccountSummary(data.entries, account);
+    if (data.portfolioFreeCash !== null) {
+      return { ...summary, freeCash: data.portfolioFreeCash };
+    }
+    return summary;
   },
 
   getAllHoldings: () => {
