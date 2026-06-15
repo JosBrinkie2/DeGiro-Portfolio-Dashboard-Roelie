@@ -35,10 +35,10 @@ export function AccountUploader({ account, label, color }: AccountUploaderProps)
   const [mergeResult, setMergeResult] = useState<MergeResult | null>(null);
 
   function tryParse(newAccountCsv: string | null, newTransactionsCsv: string | null) {
-    if (!newAccountCsv || !newTransactionsCsv) return;
+    if (!newAccountCsv && !newTransactionsCsv) return;
     try {
-      const entries = parseAccountCsv(newAccountCsv, account);
-      const transactions = parseTransactionsCsv(newTransactionsCsv, account);
+      const entries = newAccountCsv ? parseAccountCsv(newAccountCsv, account) : [];
+      const transactions = newTransactionsCsv ? parseTransactionsCsv(newTransactionsCsv, account) : [];
       const result = mergeAccountData(account, entries, transactions);
       setMergeResult(result);
     } catch (e) {
