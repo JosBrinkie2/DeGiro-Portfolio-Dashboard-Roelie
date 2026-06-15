@@ -1,20 +1,22 @@
 import { useState } from 'react';
-import { LayoutDashboard, TrendingUp, Building2, Upload } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, Building2, Upload, HelpCircle } from 'lucide-react';
 import clsx from 'clsx';
 import { DashboardPage } from './pages/DashboardPage';
 import { PortfolioPage } from './pages/PortfolioPage';
 import { BankPage } from './pages/BankPage';
 import { UploadPage } from './pages/UploadPage';
+import { FaqPage } from './pages/FaqPage';
 import { useAccountStore } from './store/useAccountStore';
 import { useAutoLoad } from './hooks/useAutoLoad';
 
-type Page = 'dashboard' | 'portfolio' | 'bank' | 'upload';
+type Page = 'dashboard' | 'portfolio' | 'bank' | 'upload' | 'faq';
 
 const NAV_ITEMS: Array<{ id: Page; label: string; icon: React.FC<{ className?: string }> }> = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'portfolio', label: 'Waardeontwikkeling', icon: TrendingUp },
   { id: 'bank', label: 'Bankrekeningen', icon: Building2 },
   { id: 'upload', label: 'Uploaden', icon: Upload },
+  { id: 'faq', label: 'Uitleg & FAQ', icon: HelpCircle },
 ];
 
 export default function App() {
@@ -68,6 +70,7 @@ export default function App() {
           {page === 'portfolio' && <PortfolioPage />}
           {page === 'bank' && <BankPage />}
           {page === 'upload' && <UploadPage />}
+          {page === 'faq' && <FaqPage />}
         </div>
       </main>
     </div>
