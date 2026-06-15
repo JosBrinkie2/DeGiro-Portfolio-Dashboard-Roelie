@@ -1,25 +1,21 @@
 import type { AccountEntry, AccountName, AccountSummary } from '../types/account';
+import type { Transaction } from '../types/transaction';
 
 /**
- * Compute account summary from account.csv entries.
+ * Compute account summary from transactions and optional account entries.
  *
- * - totalDeposited: sum of all "Storting" mutations
- * - totalWithdrawn: sum of absolute values of all "Terugboeking" mutations
- * - freeCash: most recent EUR saldo (= currently available cash for investing)
+ * - nettoInleg: net capital deployed = -(sum of all totalEUR across transactions)
+ *   buys have negative totalEUR, sells have positive — so negating gives net outflow
+ * - freeCash: most recent EUR balance from account entries (overridden by Portfolio CSV in the store)
  */
 export function computeAccountSummary(
   entries: AccountEntry[],
-  account: AccountName
+  account: AccountName,
+  transactions: Transaction[] = [],
 ): AccountSummary {
-  const deposits = entries
-    .filter((e) => e.entryType === 'deposit')
-    .reduce((sum, e) => sum + e.mutationAmount, 0);
+  const nettoInleg = -transactions.reduce((sum, t) => sum + t.totalEUR, 0);
 
-  const withdrawals = entries
-    .filter((e) => e.entryType === 'withdrawal')
-    .reduce((sum, e) => sum + Math.abs(e.mutationAmount), 0);
-
-  // Find the most recent EUR balance entry
+  // Find the most recent EUR balance entry (fallback when no Portfolio CSV available)
   const eurEntries = entries
     .filter((e) => e.balanceCurrency === 'EUR')
     .sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -28,8 +24,7 @@ export function computeAccountSummary(
 
   return {
     account,
-    totalDeposited: deposits,
-    totalWithdrawn: withdrawals,
+    nettoInleg,
     freeCash,
     currentPortfolioValue: 0, // filled in after live prices are loaded
   };

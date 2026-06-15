@@ -15,8 +15,7 @@ export interface AccountEntry {
 
 export interface AccountSummary {
   account: AccountName;
-  totalDeposited: number;
-  totalWithdrawn: number;
+  nettoInleg: number;
   freeCash: number;
   currentPortfolioValue: number;
 }
