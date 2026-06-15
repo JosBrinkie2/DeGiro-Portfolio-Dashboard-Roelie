@@ -4,8 +4,33 @@ import { getFromLocalStorage, saveToLocalStorage } from '../utils/localStorage';
 // Exchange code to Yahoo Finance suffix mapping.
 // Primary keys are MIC codes from the Uitvoeringsplaats column (col 5).
 // DeGiro short codes (Beurs, col 4) are kept as fallback.
-function yahooUrl(path: string): string {
-  return `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query2.finance.yahoo.com${path}`)}`;
+const YAHOO_BASE = 'https://query2.finance.yahoo.com';
+
+// Try multiple CORS proxies in order; return the first successful Response.
+async function fetchYahoo(path: string): Promise<Response | null> {
+  const target = `${YAHOO_BASE}${path}`;
+  const proxies: Array<() => Promise<Response>> = [
+    // allorigins /get wraps JSON in {contents, status} — handled below
+    () => fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(target)}`).then(async (r) => {
+      if (!r.ok) throw new Error('allorigins failed');
+      const wrapper = await r.json();
+      if (!wrapper.contents) throw new Error('empty contents');
+      return new Response(wrapper.contents, { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }),
+    () => fetch(`https://corsproxy.io/?url=${encodeURIComponent(target)}`),
+    () => fetch(`https://thingproxy.freeboard.io/fetch/${target}`),
+    () => fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(target)}`),
+  ];
+
+  for (const attempt of proxies) {
+    try {
+      const resp = await attempt();
+      if (resp.ok) return resp;
+    } catch {
+      // try next proxy
+    }
+  }
+  return null;
 }
 
 const MIC_TO_SUFFIX: Record<string, string> = {
@@ -84,10 +109,8 @@ export async function resolveTicker(isin: string, exchange: string, productName?
   // Helper: search Yahoo Finance and return the best matching ticker
   async function searchYahoo(query: string): Promise<string | null> {
     try {
-      const resp = await fetch(
-        yahooUrl(`/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=5&newsCount=0`)
-      );
-      if (!resp.ok) return null;
+      const resp = await fetchYahoo(`/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=5&newsCount=0`);
+      if (!resp) return null;
       const json = await resp.json();
       const quotes: Array<{ symbol: string; quoteType: string }> =
         json?.quoteResponse?.result ?? json?.quotes ?? [];
@@ -130,10 +153,8 @@ export async function resolveTicker(isin: string, exchange: string, productName?
 // Fetch a current quote for a ticker
 export async function fetchQuote(ticker: string): Promise<{ price: number; currency: string } | null> {
   try {
-    const resp = await fetch(
-      yahooUrl(`/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`)
-    );
-    if (!resp.ok) return null;
+    const resp = await fetchYahoo(`/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`);
+    if (!resp) return null;
     const json = await resp.json();
     const result = json?.chart?.result?.[0];
     if (!result) return null;
@@ -154,10 +175,8 @@ export async function fetchHistory1Y(ticker: string): Promise<PricePoint[]> {
   }
 
   try {
-    const resp = await fetch(
-      yahooUrl(`/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1wk&range=1y`)
-    );
-    if (!resp.ok) return [];
+    const resp = await fetchYahoo(`/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1wk&range=1y`);
+    if (!resp) return [];
     const json = await resp.json();
     const result = json?.chart?.result?.[0];
     if (!result) return [];
@@ -188,10 +207,8 @@ export async function fetchHistory5Day(ticker: string): Promise<PricePoint[]> {
   }
 
   try {
-    const resp = await fetch(
-      yahooUrl(`/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d`)
-    );
-    if (!resp.ok) return [];
+    const resp = await fetchYahoo(`/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d`);
+    if (!resp) return [];
     const json = await resp.json();
     const result = json?.chart?.result?.[0];
     if (!result) return [];
@@ -245,10 +262,8 @@ async function fetchFxRateToEUR(currency: string): Promise<number> {
 
   try {
     const ticker = `EUR${normalizedCurrency}=X`;
-    const resp = await fetch(
-      yahooUrl(`/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`)
-    );
-    if (!resp.ok) return 1;
+    const resp = await fetchYahoo(`/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`);
+    if (!resp) return 1;
     const json = await resp.json();
     const rate: number = json?.chart?.result?.[0]?.meta?.regularMarketPrice ?? 1;
     fxRateCache[normalizedCurrency] = { rate, fetchedAt: Date.now() };
