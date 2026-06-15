@@ -6,55 +6,33 @@ import { getFromLocalStorage, saveToLocalStorage } from '../utils/localStorage';
 // DeGiro short codes (Beurs, col 4) are kept as fallback.
 const YAHOO_BASE = 'https://query2.finance.yahoo.com';
 
-const PROXY_TIMEOUT_MS = 12000;
-
-// Race all CORS proxies in parallel; return the first successful Response.
+// Try multiple CORS proxies in sequence; return the first successful Response.
 async function fetchYahoo(path: string): Promise<Response | null> {
   const target = `${YAHOO_BASE}${path}`;
   const encoded = encodeURIComponent(target);
 
-  function timed(attempt: () => Promise<Response>): Promise<Response> {
-    return attempt().then((resp) => {
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      return resp;
-    });
-  }
-
-  const controllers = [new AbortController(), new AbortController(), new AbortController(), new AbortController()];
-  const timer = setTimeout(() => controllers.forEach((c) => c.abort()), PROXY_TIMEOUT_MS);
-
-  const attempts: Array<Promise<Response>> = [
+  const proxies: Array<() => Promise<Response>> = [
     // allorigins /get wraps the body in {contents, status} JSON
-    timed(() =>
-      fetch(`https://api.allorigins.win/get?url=${encoded}`, { signal: controllers[0].signal })
-        .then(async (r) => {
-          if (!r.ok) throw new Error('allorigins outer failed');
-          const wrapper = await r.json();
-          const code: number = wrapper.status?.http_code ?? 200;
-          if (!wrapper.contents || code >= 400) throw new Error(`allorigins inner ${code}`);
-          return new Response(wrapper.contents, { status: 200, headers: { 'Content-Type': 'application/json' } });
-        })
-    ),
-    timed(() =>
-      fetch(`https://corsproxy.io/?url=${encoded}`, { signal: controllers[1].signal })
-    ),
-    timed(() =>
-      fetch(`https://api.codetabs.com/v1/proxy?quest=${encoded}`, { signal: controllers[2].signal })
-    ),
-    timed(() =>
-      fetch(`https://corsproxy.org/?${encoded}`, { signal: controllers[3].signal })
-    ),
+    () => fetch(`https://api.allorigins.win/get?url=${encoded}`).then(async (r) => {
+      if (!r.ok) throw new Error('allorigins failed');
+      const wrapper = await r.json();
+      if (!wrapper.contents) throw new Error('empty contents');
+      return new Response(wrapper.contents, { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }),
+    () => fetch(`https://corsproxy.io/?url=${encoded}`),
+    () => fetch(`https://thingproxy.freeboard.io/fetch/${target}`),
+    () => fetch(`https://api.codetabs.com/v1/proxy?quest=${encoded}`),
   ];
 
-  try {
-    const resp = await Promise.any(attempts);
-    clearTimeout(timer);
-    controllers.forEach((c) => c.abort()); // cancel remaining in-flight requests
-    return resp;
-  } catch {
-    clearTimeout(timer);
-    return null;
+  for (const attempt of proxies) {
+    try {
+      const resp = await attempt();
+      if (resp.ok) return resp;
+    } catch {
+      // try next proxy
+    }
   }
+  return null;
 }
 
 const MIC_TO_SUFFIX: Record<string, string> = {
@@ -91,7 +69,7 @@ const MIC_TO_SUFFIX: Record<string, string> = {
   EPA:  '.PA',
 };
 
-const TICKER_CACHE_KEY = 'ticker_cache_v2';
+const TICKER_CACHE_KEY = 'ticker_cache_v1';
 const HISTORY_CACHE_KEY = 'history_cache_v1';
 const CACHE_TTL_PRICE = 5 * 60 * 1000;       // 5 minutes
 const CACHE_TTL_HISTORY = 60 * 60 * 1000;    // 1 hour
@@ -111,15 +89,24 @@ export interface QuoteResult {
 // Resolve a ticker symbol for an ISIN.
 // Strategy:
 //   1. Return cached ticker if available.
-//   2. Search Yahoo by ISIN and pick the result matching the expected exchange suffix.
-//   3. If that fails and a product name is available, search Yahoo by name.
-//   4. Last resort: return ISIN+suffix as-is (not cached — will retry next time).
+//   2. Probe ISIN+suffix directly against Yahoo chart API (works for most tickers).
+//   3. Search Yahoo by ISIN and pick the result matching the expected exchange suffix.
+//   4. If that fails and a product name is available, search Yahoo by name.
+//   5. Last resort: cache and return ISIN+suffix as-is.
 export async function resolveTicker(isin: string, exchange: string, productName?: string): Promise<string> {
   const cache = getFromLocalStorage<Record<string, string>>(TICKER_CACHE_KEY) ?? {};
   if (cache[isin]) return cache[isin];
 
   const suffix = MIC_TO_SUFFIX[exchange?.toUpperCase()] ?? '';
   const candidate = `${isin}${suffix}`;
+
+  // Step 2: probe the candidate ticker directly
+  const probeResult = await fetchQuote(candidate);
+  if (probeResult) {
+    cache[isin] = candidate;
+    saveToLocalStorage(TICKER_CACHE_KEY, cache);
+    return candidate;
+  }
 
   // Helper: search Yahoo Finance and return the best matching ticker
   async function searchYahoo(query: string): Promise<string | null> {
@@ -159,7 +146,9 @@ export async function resolveTicker(isin: string, exchange: string, productName?
     }
   }
 
-  // Step 4: last resort — do NOT cache so resolution retries on next load
+  // Step 5: last resort — cache the candidate so we don't re-probe every load
+  cache[isin] = candidate;
+  saveToLocalStorage(TICKER_CACHE_KEY, cache);
   return candidate;
 }
 
@@ -315,7 +304,7 @@ export async function fetchAllPrices(
           ]);
 
           if (!quote) {
-            onProgress(isin, null, 'Ticker niet gevonden');
+            onProgress(isin, null, 'Koers niet beschikbaar');
             return;
           }
 
