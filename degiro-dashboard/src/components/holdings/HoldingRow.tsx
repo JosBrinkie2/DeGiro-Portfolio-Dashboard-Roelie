@@ -30,6 +30,7 @@ export function HoldingRow({ holding }: HoldingRowProps) {
 
   const isLoading = priceData?.loading ?? false;
   const hasPrice = price > 0;
+  const priceError = priceData?.error ?? null;
 
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
@@ -72,7 +73,9 @@ export function HoldingRow({ holding }: HoldingRowProps) {
           <span title={ticker ?? undefined}>
             {isForeignCurrency && nativePriceRaw !== null
               ? formatNativePrice(nativePriceRaw, nativeCurrency!)
-              : <span className="text-slate-300">—</span>
+              : priceError
+                ? <span className="text-xs text-red-400 cursor-help" title={priceError}>⚠</span>
+                : <span className="text-slate-300">—</span>
             }
           </span>
         )}
@@ -84,6 +87,8 @@ export function HoldingRow({ holding }: HoldingRowProps) {
           <div className="flex justify-end"><Spinner size="sm" /></div>
         ) : hasPrice ? (
           <span>{formatEuro(price)}</span>
+        ) : priceError ? (
+          <span className="text-xs text-red-400 cursor-help" title={priceError}>⚠</span>
         ) : (
           <span className="text-slate-300">—</span>
         )}

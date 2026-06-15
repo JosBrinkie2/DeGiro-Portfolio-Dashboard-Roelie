@@ -6,11 +6,12 @@ import { getFromLocalStorage, saveToLocalStorage } from '../utils/localStorage';
 // DeGiro short codes (Beurs, col 4) are kept as fallback.
 const YAHOO_BASE = 'https://query2.finance.yahoo.com';
 
-const PROXY_TIMEOUT_MS = 8000;
+const PROXY_TIMEOUT_MS = 12000;
 
 // Race all CORS proxies in parallel; return the first successful Response.
 async function fetchYahoo(path: string): Promise<Response | null> {
   const target = `${YAHOO_BASE}${path}`;
+  const encoded = encodeURIComponent(target);
 
   function timed(attempt: () => Promise<Response>): Promise<Response> {
     return attempt().then((resp) => {
@@ -19,13 +20,13 @@ async function fetchYahoo(path: string): Promise<Response | null> {
     });
   }
 
-  const controllers = [new AbortController(), new AbortController()];
+  const controllers = [new AbortController(), new AbortController(), new AbortController(), new AbortController()];
   const timer = setTimeout(() => controllers.forEach((c) => c.abort()), PROXY_TIMEOUT_MS);
 
   const attempts: Array<Promise<Response>> = [
     // allorigins /get wraps the body in {contents, status} JSON
     timed(() =>
-      fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(target)}`, { signal: controllers[0].signal })
+      fetch(`https://api.allorigins.win/get?url=${encoded}`, { signal: controllers[0].signal })
         .then(async (r) => {
           if (!r.ok) throw new Error('allorigins outer failed');
           const wrapper = await r.json();
@@ -35,7 +36,13 @@ async function fetchYahoo(path: string): Promise<Response | null> {
         })
     ),
     timed(() =>
-      fetch(`https://corsproxy.io/?url=${encodeURIComponent(target)}`, { signal: controllers[1].signal })
+      fetch(`https://corsproxy.io/?url=${encoded}`, { signal: controllers[1].signal })
+    ),
+    timed(() =>
+      fetch(`https://api.codetabs.com/v1/proxy?quest=${encoded}`, { signal: controllers[2].signal })
+    ),
+    timed(() =>
+      fetch(`https://corsproxy.org/?${encoded}`, { signal: controllers[3].signal })
     ),
   ];
 
@@ -289,7 +296,7 @@ export async function fetchAllPrices(
     nativePriceRaw: number;
     history1Y: PricePoint[];
     history5Day: PricePoint[];
-  } | null) => void
+  } | null, errorReason?: string) => void
 ): Promise<void> {
   const BATCH_SIZE = 2;
   const DELAY = 600;
@@ -307,8 +314,13 @@ export async function fetchAllPrices(
             fetchHistory5Day(ticker),
           ]);
 
-          const rawPrice = quote?.price ?? 0;
-          const currency = quote?.currency ?? 'EUR';
+          if (!quote) {
+            onProgress(isin, null, 'Ticker niet gevonden');
+            return;
+          }
+
+          const rawPrice = quote.price ?? 0;
+          const currency = quote.currency ?? 'EUR';
           // Yahoo quotes London securities in GBp (pence) — normalize to GBP first
           const normalizedPrice = currency === 'GBp' ? rawPrice / 100 : rawPrice;
           const nativeCurrency = currency === 'GBp' ? 'GBP' : currency;
@@ -326,7 +338,7 @@ export async function fetchAllPrices(
             history5Day,
           });
         } catch {
-          onProgress(isin, null);
+          onProgress(isin, null, 'API niet bereikbaar');
         }
       })
     );
