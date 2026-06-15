@@ -12,8 +12,15 @@ interface AccountUploaderProps {
   color: 'blue' | 'violet';
 }
 
+const ACCOUNT_KEY: Record<AccountName, 'roel64' | 'roelPensioen64'> = {
+  Roel64: 'roel64',
+  RoelPensioen64: 'roelPensioen64',
+};
+
 export function AccountUploader({ account, label, color }: AccountUploaderProps) {
   const mergeAccountData = useAccountStore((s) => s.mergeAccountData);
+  const clearAccount = useAccountStore((s) => s.clearAccount);
+  const loaded = useAccountStore((s) => s[ACCOUNT_KEY[account]].loaded);
 
   const [accountFilename, setAccountFilename] = useState<string | null>(null);
   const [transactionsFilename, setTransactionsFilename] = useState<string | null>(null);
@@ -46,6 +53,15 @@ export function AccountUploader({ account, label, color }: AccountUploaderProps)
     } catch {
       setAccountError('Ongeldig account.csv bestand');
     }
+  }
+
+  function handleClear() {
+    clearAccount(account);
+    setAccountFilename(null);
+    setTransactionsFilename(null);
+    setAccountCsvText(null);
+    setTransactionsCsvText(null);
+    setMergeResult(null);
   }
 
   function handleTransactionsFile(text: string, filename: string) {
@@ -86,6 +102,16 @@ export function AccountUploader({ account, label, color }: AccountUploaderProps)
           error={transactionsError}
         />
       </div>
+      {loaded && (
+        <div className="px-4 pt-1 pb-3 flex justify-end">
+          <button
+            onClick={handleClear}
+            className="text-xs text-red-500 hover:text-red-700 transition"
+          >
+            Wis data
+          </button>
+        </div>
+      )}
       {mergeResult && (
         <div className="px-4 pb-4 text-xs text-slate-500 space-y-0.5">
           <p>
