@@ -38,7 +38,7 @@ function parseTrade(description: string): ParsedTrade | null {
   const m = TRADE_RE.exec(description);
   if (!m) return null;
   return {
-    direction: /koop/i.test(m[1]) ? 'Koop' : 'Verkoop',
+    direction: m[1].toLowerCase() === 'koop' ? 'Koop' : 'Verkoop',
     quantity: parseDutchNum(m[2]),
     price: parseDutchNum(m[3]),
     currency: m[4].toUpperCase(),
