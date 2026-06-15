@@ -1,0 +1,7 @@
+name = "degiro-dashboard-proxy"
+main = "src/worker.js"
+compatibility_date = "2024-11-01"
+
+# Free plan is fine. After `wrangler deploy` the Worker is reachable at
+# https://degiro-dashboard-proxy.<your-account>.workers.dev
+# Set that URL as VITE_PROXY_BASE when building the dashboard (see README.md).

@@ -26,6 +26,11 @@ jobs:
       - name: Build
         run: npm run build
         working-directory: degiro-dashboard
+        env:
+          # Optional Cloudflare Worker proxy URL. Set under
+          # Settings → Secrets and variables → Actions → Variables.
+          # If unset, the app falls back to public CORS proxies.
+          VITE_PROXY_BASE: ${{ vars.VITE_PROXY_BASE }}
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4

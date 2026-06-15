@@ -5,64 +5,121 @@ import { getFromLocalStorage, saveToLocalStorage } from '../utils/localStorage';
 // Primary keys are MIC codes from the Uitvoeringsplaats column (col 5).
 // DeGiro short codes (Beurs, col 4) are kept as fallback.
 const YAHOO_BASE = 'https://query2.finance.yahoo.com';
+const STOOQ_BASE = 'https://stooq.com';
 
-// Try multiple CORS proxies in sequence; return the first successful Response.
-async function fetchYahoo(path: string): Promise<Response | null> {
-  const target = `${YAHOO_BASE}${path}`;
-  const encoded = encodeURIComponent(target);
+// Optional Cloudflare Worker proxy (see cloudflare-proxy/). When set it becomes
+// the primary, reliable source; the public CORS proxies remain as fallback.
+// Trailing slashes are trimmed so `${PROXY_BASE}/yahoo${path}` is well-formed.
+const PROXY_BASE = ((import.meta.env.VITE_PROXY_BASE as string | undefined) ?? '').replace(/\/+$/, '');
 
-  const proxies: Array<() => Promise<Response>> = [
-    // allorigins /get wraps the body in {contents, status} JSON
-    () => fetch(`https://api.allorigins.win/get?url=${encoded}`).then(async (r) => {
-      if (!r.ok) throw new Error('allorigins failed');
-      const wrapper = await r.json();
-      if (!wrapper.contents) throw new Error('empty contents');
-      return new Response(wrapper.contents, { status: 200, headers: { 'Content-Type': 'application/json' } });
-    }),
-    () => fetch(`https://corsproxy.io/?url=${encoded}`),
-    () => fetch(`https://thingproxy.freeboard.io/fetch/${target}`),
-    () => fetch(`https://api.codetabs.com/v1/proxy?quest=${encoded}`),
-  ];
+const PROXY_TIMEOUT = 6000; // per-attempt timeout (ms)
 
-  for (const attempt of proxies) {
-    try {
-      const resp = await attempt();
-      if (resp.ok) return resp;
-    } catch {
-      // try next proxy
+// A single proxy attempt: given an abort signal, produce a Response.
+type Attempt = (signal: AbortSignal) => Promise<Response>;
+
+// Race a group of attempts: resolve with the first OK response, abort the
+// losers (never the winner, so its body stays readable), and resolve null only
+// once every attempt has failed. Each attempt has its own timeout.
+function raceAttempts(attempts: Attempt[]): Promise<Response | null> {
+  return new Promise((resolve) => {
+    if (attempts.length === 0) {
+      resolve(null);
+      return;
     }
+    const controllers = attempts.map(() => new AbortController());
+    const timers = controllers.map((c) => setTimeout(() => c.abort(), PROXY_TIMEOUT));
+    let settled = false;
+    let pending = attempts.length;
+
+    attempts.forEach((attempt, i) => {
+      attempt(controllers[i].signal)
+        .then((resp) => {
+          if (!resp.ok) throw new Error(`status ${resp.status}`);
+          if (settled) return;
+          settled = true;
+          timers.forEach(clearTimeout);
+          controllers.forEach((c, j) => {
+            if (j !== i) c.abort();
+          });
+          resolve(resp);
+        })
+        .catch(() => {
+          pending -= 1;
+          if (!settled && pending === 0) {
+            timers.forEach(clearTimeout);
+            resolve(null);
+          }
+        });
+    });
+  });
+}
+
+// Run attempt groups in order, racing within each group; return the first
+// group that yields an OK response. Keeps outbound fan-out bounded (2 at a
+// time) so we don't trip the public proxies' rate limits.
+async function fetchViaGroups(groups: Attempt[][]): Promise<Response | null> {
+  for (const group of groups) {
+    const resp = await raceAttempts(group);
+    if (resp) return resp;
   }
   return null;
 }
 
-// Fetch a Stooq URL through CORS proxies; returns raw text response.
-async function fetchStooqText(stooqUrl: string): Promise<string | null> {
-  const encoded = encodeURIComponent(stooqUrl);
-
-  const proxies: Array<() => Promise<Response>> = [
-    () => fetch(`https://api.allorigins.win/get?url=${encoded}`).then(async (r) => {
+// allorigins /get wraps the upstream body in {contents, status} JSON — unwrap
+// it back into a plain Response so callers can treat every proxy uniformly.
+function allOriginsAttempt(encodedTarget: string): Attempt {
+  return (signal) =>
+    fetch(`https://api.allorigins.win/get?url=${encodedTarget}`, { signal }).then(async (r) => {
       if (!r.ok) throw new Error('allorigins failed');
       const wrapper = await r.json();
       if (!wrapper.contents) throw new Error('empty contents');
-      return new Response(wrapper.contents, { status: 200 });
-    }),
-    () => fetch(`https://corsproxy.io/?url=${encoded}`),
-    () => fetch(`https://thingproxy.freeboard.io/fetch/${stooqUrl}`),
-    () => fetch(`https://api.codetabs.com/v1/proxy?quest=${encoded}`),
+      return new Response(wrapper.contents, { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+}
+
+// Fetch a Yahoo Finance path, racing the Worker (if configured) and public
+// proxies. Returns the first OK Response, or null if all fail.
+async function fetchYahoo(path: string): Promise<Response | null> {
+  const target = `${YAHOO_BASE}${path}`;
+  const encoded = encodeURIComponent(target);
+
+  // Primary group: Worker (direct CORS, no wrapping) + one reliable public proxy.
+  const primary: Attempt[] = [];
+  if (PROXY_BASE) primary.push((signal) => fetch(`${PROXY_BASE}/yahoo${path}`, { signal }));
+  primary.push((signal) => fetch(`https://api.codetabs.com/v1/proxy?quest=${encoded}`, { signal }));
+
+  // Fallback group: remaining public proxies (allorigins last — slowest).
+  const fallback: Attempt[] = [
+    (signal) => fetch(`https://corsproxy.io/?url=${encoded}`, { signal }),
+    (signal) => fetch(`https://thingproxy.freeboard.io/fetch/${target}`, { signal }),
+    allOriginsAttempt(encoded),
   ];
 
-  for (const attempt of proxies) {
-    try {
-      const resp = await attempt();
-      if (resp.ok) {
-        const text = await resp.text();
-        return text;
-      }
-    } catch {
-      // try next proxy
-    }
+  return fetchViaGroups([primary, fallback]);
+}
+
+// Fetch a Stooq URL through the Worker/public proxies; returns raw text.
+async function fetchStooqText(stooqUrl: string): Promise<string | null> {
+  const encoded = encodeURIComponent(stooqUrl);
+  const stooqPath = stooqUrl.startsWith(STOOQ_BASE) ? stooqUrl.slice(STOOQ_BASE.length) : stooqUrl;
+
+  const primary: Attempt[] = [];
+  if (PROXY_BASE) primary.push((signal) => fetch(`${PROXY_BASE}/stooq${stooqPath}`, { signal }));
+  primary.push((signal) => fetch(`https://api.codetabs.com/v1/proxy?quest=${encoded}`, { signal }));
+
+  const fallback: Attempt[] = [
+    (signal) => fetch(`https://corsproxy.io/?url=${encoded}`, { signal }),
+    (signal) => fetch(`https://thingproxy.freeboard.io/fetch/${stooqUrl}`, { signal }),
+    allOriginsAttempt(encoded),
+  ];
+
+  const resp = await fetchViaGroups([primary, fallback]);
+  if (!resp) return null;
+  try {
+    return await resp.text();
+  } catch {
+    return null;
   }
-  return null;
 }
 
 // Mapping from Yahoo Finance suffix → Stooq suffix, and the currency for that exchange.
@@ -119,12 +176,38 @@ const MIC_TO_SUFFIX: Record<string, string> = {
 
 const TICKER_CACHE_KEY = 'ticker_cache_v1';
 const HISTORY_CACHE_KEY = 'history_cache_v1';
+const QUOTE_CACHE_KEY = 'quote_cache_v1';
 const CACHE_TTL_PRICE = 5 * 60 * 1000;       // 5 minutes
 const CACHE_TTL_HISTORY = 60 * 60 * 1000;    // 1 hour
+
+// Batching: with proxies now raced + timed out, modest fan-out is safe.
+// Quotes are single raced requests, so they batch wider; the heavier history
+// calls stay gentler to avoid tripping public-proxy rate limits.
+const QUOTE_BATCH_SIZE = 5;
+const QUOTE_BATCH_DELAY = 250;
+const HISTORY_BATCH_SIZE = 3;
+const HISTORY_BATCH_DELAY = 300;
 
 interface HistoryCacheEntry {
   data: PricePoint[];
   fetchedAt: number;
+}
+
+// Quote cache — persisted so reloads within the price TTL paint instantly
+// without re-fetching every quote. Keyed by ISIN.
+export interface QuoteCacheEntry {
+  ticker: string;
+  priceEUR: number;
+  nativeCurrency: string;
+  nativePriceRaw: number;
+  fetchedAt: number;
+}
+
+export function getCachedQuote(isin: string): QuoteCacheEntry | null {
+  const cache = getFromLocalStorage<Record<string, QuoteCacheEntry>>(QUOTE_CACHE_KEY) ?? {};
+  const entry = cache[isin];
+  if (entry && Date.now() - entry.fetchedAt < CACHE_TTL_PRICE) return entry;
+  return null;
 }
 
 export interface QuoteResult {
@@ -134,6 +217,14 @@ export interface QuoteResult {
   priceInEUR: number;
 }
 
+export interface ResolvedTicker {
+  ticker: string;
+  // Quote captured during the direct probe, if that path succeeded — lets the
+  // caller skip a second identical fetch. null when the ticker came from cache
+  // or a search (no fresh quote was fetched).
+  quote: { price: number; currency: string } | null;
+}
+
 // Resolve a ticker symbol for an ISIN.
 // Strategy:
 //   1. Return cached ticker if available.
@@ -141,9 +232,9 @@ export interface QuoteResult {
 //   3. Search Yahoo by ISIN and pick the result matching the expected exchange suffix.
 //   4. If that fails and a product name is available, search Yahoo by name.
 //   5. Last resort: cache and return ISIN+suffix as-is.
-export async function resolveTicker(isin: string, exchange: string, productName?: string): Promise<string> {
+export async function resolveTicker(isin: string, exchange: string, productName?: string): Promise<ResolvedTicker> {
   const cache = getFromLocalStorage<Record<string, string>>(TICKER_CACHE_KEY) ?? {};
-  if (cache[isin]) return cache[isin];
+  if (cache[isin]) return { ticker: cache[isin], quote: null };
 
   const suffix = MIC_TO_SUFFIX[exchange?.toUpperCase()] ?? '';
   const candidate = `${isin}${suffix}`;
@@ -153,7 +244,7 @@ export async function resolveTicker(isin: string, exchange: string, productName?
   if (probeResult) {
     cache[isin] = candidate;
     saveToLocalStorage(TICKER_CACHE_KEY, cache);
-    return candidate;
+    return { ticker: candidate, quote: probeResult };
   }
 
   // Helper: search Yahoo Finance and return the best matching ticker
@@ -181,7 +272,7 @@ export async function resolveTicker(isin: string, exchange: string, productName?
   if (isinMatch) {
     cache[isin] = isinMatch;
     saveToLocalStorage(TICKER_CACHE_KEY, cache);
-    return isinMatch;
+    return { ticker: isinMatch, quote: null };
   }
 
   // Step 3: search by product name (fallback for ISINs Yahoo doesn't know)
@@ -190,14 +281,14 @@ export async function resolveTicker(isin: string, exchange: string, productName?
     if (nameMatch) {
       cache[isin] = nameMatch;
       saveToLocalStorage(TICKER_CACHE_KEY, cache);
-      return nameMatch;
+      return { ticker: nameMatch, quote: null };
     }
   }
 
   // Step 5: last resort — cache the candidate so we don't re-probe every load
   cache[isin] = candidate;
   saveToLocalStorage(TICKER_CACHE_KEY, cache);
-  return candidate;
+  return { ticker: candidate, quote: null };
 }
 
 // Fetch a current quote for a ticker
@@ -392,67 +483,104 @@ async function fetchFxRateToEUR(currency: string): Promise<number> {
   return 1;
 }
 
-// Batch fetch with rate limiting (5 per batch, 300ms delay)
-export async function fetchAllPrices(
-  isins: Array<{ isin: string; exchange: string; productName?: string }>,
-  onProgress: (isin: string, data: {
-    ticker: string;
-    priceEUR: number;
-    nativeCurrency: string;
-    nativePriceRaw: number;
-    history1Y: PricePoint[];
-    history5Day: PricePoint[];
-  } | null, errorReason?: string) => void
-): Promise<void> {
-  const BATCH_SIZE = 2;
-  const DELAY = 600;
+export interface QuotePhaseResult {
+  ticker: string;
+  priceEUR: number;
+  nativeCurrency: string;
+  nativePriceRaw: number;
+}
 
-  for (let i = 0; i < isins.length; i += BATCH_SIZE) {
-    const batch = isins.slice(i, i + BATCH_SIZE);
+export interface HistoryPhaseResult {
+  history1Y: PricePoint[];
+  history5Day: PricePoint[];
+}
+
+// Phase A (fast): resolve the ticker, fetch the current quote, convert to EUR,
+// and report it so the table can paint the price immediately. Returns the
+// resolved tickers so the history phase doesn't have to re-resolve them.
+// Fresh quotes are persisted to localStorage for instant reloads.
+export async function fetchQuotesPhase(
+  isins: Array<{ isin: string; exchange: string; productName?: string }>,
+  onQuote: (isin: string, data: QuotePhaseResult | null, errorReason?: string) => void
+): Promise<Array<{ isin: string; ticker: string }>> {
+  const resolved: Array<{ isin: string; ticker: string }> = [];
+  const quoteCache = getFromLocalStorage<Record<string, QuoteCacheEntry>>(QUOTE_CACHE_KEY) ?? {};
+
+  for (let i = 0; i < isins.length; i += QUOTE_BATCH_SIZE) {
+    const batch = isins.slice(i, i + QUOTE_BATCH_SIZE);
 
     await Promise.all(
       batch.map(async ({ isin, exchange, productName }) => {
         try {
-          const ticker = await resolveTicker(isin, exchange, productName);
-          const [quote, history1Y, history5Day] = await Promise.all([
-            fetchQuote(ticker),
-            fetchHistory1Y(ticker),
-            fetchHistory5Day(ticker),
-          ]);
+          const { ticker, quote: probedQuote } = await resolveTicker(isin, exchange, productName);
+          resolved.push({ isin, ticker });
 
-          // Fallback: try Stooq when Yahoo quote fails
-          const resolvedQuote = quote ?? await fetchQuoteStooq(ticker);
-          if (!resolvedQuote) {
-            onProgress(isin, null, 'Koers niet beschikbaar');
+          // Reuse the probe's quote when available, else fetch (Yahoo → Stooq).
+          const quote = probedQuote ?? (await fetchQuote(ticker)) ?? (await fetchQuoteStooq(ticker));
+          if (!quote) {
+            onQuote(isin, null, 'Koers niet beschikbaar');
             return;
           }
 
-          const rawPrice = resolvedQuote.price ?? 0;
-          const currency = resolvedQuote.currency ?? 'EUR';
+          const rawPrice = quote.price ?? 0;
+          const currency = quote.currency ?? 'EUR';
           // Yahoo quotes London securities in GBp (pence) — normalize to GBP first
           const normalizedPrice = currency === 'GBp' ? rawPrice / 100 : rawPrice;
           const nativeCurrency = currency === 'GBp' ? 'GBP' : currency;
           const fxRate = await fetchFxRateToEUR(currency);
           // fxRate = units of foreign currency per 1 EUR (EURGBP=X ≈ 0.855, EURUSD=X ≈ 1.08)
-          // priceEUR = normalizedPrice / fxRate
           const priceEUR = fxRate > 0 ? normalizedPrice / fxRate : normalizedPrice;
 
-          onProgress(isin, {
+          quoteCache[isin] = {
             ticker,
             priceEUR,
             nativeCurrency,
             nativePriceRaw: normalizedPrice,
-            history1Y,
-            history5Day,
-          });
+            fetchedAt: Date.now(),
+          };
+
+          onQuote(isin, { ticker, priceEUR, nativeCurrency, nativePriceRaw: normalizedPrice });
         } catch {
-          onProgress(isin, null, 'API niet bereikbaar');
+          onQuote(isin, null, 'API niet bereikbaar');
         }
       })
     );
 
-    if (i + BATCH_SIZE < isins.length) {
-      await new Promise((r) => setTimeout(r, DELAY));
+    if (i + QUOTE_BATCH_SIZE < isins.length) {
+      await new Promise((r) => setTimeout(r, QUOTE_BATCH_DELAY));
+    }
+  }
+
+  // One localStorage write for the whole batch (avoids O(n) writes).
+  saveToLocalStorage(QUOTE_CACHE_KEY, quoteCache);
+  return resolved;
+}
+
+// Phase B (lazy, background): fetch 1Y + 5D history for sparklines/trend.
+// Both are already localStorage-cached, so reloads within TTL are cheap.
+export async function fetchHistoryPhase(
+  resolved: Array<{ isin: string; ticker: string }>,
+  onHistory: (isin: string, data: HistoryPhaseResult | null) => void
+): Promise<void> {
+  for (let i = 0; i < resolved.length; i += HISTORY_BATCH_SIZE) {
+    const batch = resolved.slice(i, i + HISTORY_BATCH_SIZE);
+
+    await Promise.all(
+      batch.map(async ({ isin, ticker }) => {
+        try {
+          const [history1Y, history5Day] = await Promise.all([
+            fetchHistory1Y(ticker),
+            fetchHistory5Day(ticker),
+          ]);
+          onHistory(isin, { history1Y, history5Day });
+        } catch {
+          onHistory(isin, null);
+        }
+      })
+    );
+
+    if (i + HISTORY_BATCH_SIZE < resolved.length) {
+      await new Promise((r) => setTimeout(r, HISTORY_BATCH_DELAY));
     }
   }
 }
