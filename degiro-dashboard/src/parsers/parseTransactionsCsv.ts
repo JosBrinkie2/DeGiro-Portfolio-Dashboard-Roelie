@@ -6,8 +6,8 @@ import { parseDutchDate } from '../utils/dates';
 
 // transactions.csv column indices (0-based):
 // 0=Datum, 1=Tijd, 2=Product, 3=ISIN, 4=Beurs, 5=Uitvoeringsplaats,
-// 6=Aantal, 7=Koers(currency), 8=Koers(amount), 9=LokaleWaarde(currency),
-// 10=LokaleWaarde(amount), 11=WaardeEUR, 12=Wisselkoers,
+// 6=Aantal, 7=Koers(amount), 8=Koers(currency), 9=LokaleWaarde(amount),
+// 10=LokaleWaarde(currency), 11=WaardeEUR, 12=Wisselkoers,
 // 13=AutoFXKosten, 14=Transactiekosten, 15=TotaalEUR, 16=Order ID
 
 const COL = {
@@ -17,8 +17,8 @@ const COL = {
   BEURS: 4,
   UITVOERINGSPLAATS: 5,
   AANTAL: 6,
-  KOERS_CURRENCY: 7,
-  KOERS_AMOUNT: 8,
+  KOERS_AMOUNT: 7,
+  KOERS_CURRENCY: 8,
   WAARDE_EUR: 11,
   TOTAAL_EUR: 15,
 } as const;

@@ -1,4 +1,4 @@
-import { TrendingUp, Wallet, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
+import { TrendingUp, Wallet, ArrowUpCircle } from 'lucide-react';
 import type { AccountSummary } from '../../types/account';
 import { formatEuro } from '../../utils/currency';
 import { Spinner } from '../ui/Spinner';
@@ -46,10 +46,9 @@ export function AccountSummaryCard({ summary, pricesLoading, color }: AccountSum
     );
   }
 
-  const netInvested = summary.totalDeposited - summary.totalWithdrawn;
   const portfolioValue = summary.currentPortfolioValue + summary.freeCash;
-  const totalPnl = portfolioValue - netInvested;
-  const totalPnlPct = netInvested > 0 ? (totalPnl / netInvested) * 100 : 0;
+  const totalPnl = portfolioValue - summary.nettoInleg;
+  const totalPnlPct = summary.nettoInleg > 0 ? (totalPnl / summary.nettoInleg) * 100 : 0;
 
   return (
     <div className="rounded-xl bg-white shadow-sm border border-slate-100 overflow-hidden">
@@ -80,14 +79,9 @@ export function AccountSummaryCard({ summary, pricesLoading, color }: AccountSum
         <Metric
           icon={<ArrowUpCircle className="h-4 w-4 text-green-600" />}
           iconColor="bg-green-50"
-          label="Totaal gestort"
-          value={formatEuro(summary.totalDeposited)}
-        />
-        <Metric
-          icon={<ArrowDownCircle className="h-4 w-4 text-orange-500" />}
-          iconColor="bg-orange-50"
-          label="Terugboekingen"
-          value={formatEuro(summary.totalWithdrawn)}
+          label="Netto inleg"
+          value={formatEuro(summary.nettoInleg)}
+          sub="Gestort minus opgenomen"
         />
         <Metric
           icon={<Wallet className="h-4 w-4 text-blue-600" />}
@@ -101,7 +95,7 @@ export function AccountSummaryCard({ summary, pricesLoading, color }: AccountSum
           iconColor="bg-slate-100"
           label="Totaal resultaat"
           value={`${totalPnl >= 0 ? '+' : ''}${formatEuro(totalPnl)}`}
-          sub={`t.o.v. netto inleg ${formatEuro(netInvested)}`}
+          sub={`t.o.v. netto inleg ${formatEuro(summary.nettoInleg)}`}
         />
       </div>
     </div>

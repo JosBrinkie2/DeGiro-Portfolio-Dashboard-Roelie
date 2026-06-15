@@ -3,6 +3,7 @@ import { UploadZone } from './UploadZone';
 import type { AccountName } from '../../types/account';
 import { parseAccountCsv } from '../../parsers/parseAccountCsv';
 import { parseTransactionsCsv } from '../../parsers/parseTransactionsCsv';
+import { parsePortfolioCsv } from '../../parsers/parsePortfolioCsv';
 import { useAccountStore } from '../../store/useAccountStore';
 import type { MergeResult } from '../../store/useAccountStore';
 
@@ -19,15 +20,18 @@ const ACCOUNT_KEY: Record<AccountName, 'roel64' | 'roelPensioen64'> = {
 
 export function AccountUploader({ account, label, color }: AccountUploaderProps) {
   const mergeAccountData = useAccountStore((s) => s.mergeAccountData);
+  const setPortfolioFreeCash = useAccountStore((s) => s.setPortfolioFreeCash);
   const clearAccount = useAccountStore((s) => s.clearAccount);
   const loaded = useAccountStore((s) => s[ACCOUNT_KEY[account]].loaded);
 
   const [accountFilename, setAccountFilename] = useState<string | null>(null);
   const [transactionsFilename, setTransactionsFilename] = useState<string | null>(null);
+  const [portfolioFilename, setPortfolioFilename] = useState<string | null>(null);
   const [accountCsvText, setAccountCsvText] = useState<string | null>(null);
   const [transactionsCsvText, setTransactionsCsvText] = useState<string | null>(null);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [transactionsError, setTransactionsError] = useState<string | null>(null);
+  const [portfolioError, setPortfolioError] = useState<string | null>(null);
   const [mergeResult, setMergeResult] = useState<MergeResult | null>(null);
 
   function tryParse(newAccountCsv: string | null, newTransactionsCsv: string | null) {
@@ -51,17 +55,8 @@ export function AccountUploader({ account, label, color }: AccountUploaderProps)
       setAccountFilename(filename);
       tryParse(text, transactionsCsvText);
     } catch {
-      setAccountError('Ongeldig account.csv bestand');
+      setAccountError('Ongeldig rekening.csv bestand');
     }
-  }
-
-  function handleClear() {
-    clearAccount(account);
-    setAccountFilename(null);
-    setTransactionsFilename(null);
-    setAccountCsvText(null);
-    setTransactionsCsvText(null);
-    setMergeResult(null);
   }
 
   function handleTransactionsFile(text: string, filename: string) {
@@ -77,6 +72,27 @@ export function AccountUploader({ account, label, color }: AccountUploaderProps)
     }
   }
 
+  function handlePortfolioFile(text: string, filename: string) {
+    setPortfolioError(null);
+    try {
+      const { freeCash } = parsePortfolioCsv(text);
+      setPortfolioFreeCash(account, freeCash);
+      setPortfolioFilename(filename);
+    } catch {
+      setPortfolioError('Ongeldig portfolio.csv bestand');
+    }
+  }
+
+  function handleClear() {
+    clearAccount(account);
+    setAccountFilename(null);
+    setTransactionsFilename(null);
+    setPortfolioFilename(null);
+    setAccountCsvText(null);
+    setTransactionsCsvText(null);
+    setMergeResult(null);
+  }
+
   const headerColor = color === 'blue'
     ? 'bg-blue-600'
     : 'bg-violet-600';
@@ -86,13 +102,13 @@ export function AccountUploader({ account, label, color }: AccountUploaderProps)
       <div className={`${headerColor} px-5 py-3`}>
         <h3 className="font-semibold text-white">{label}</h3>
       </div>
-      <div className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <UploadZone
-          label="account.csv"
-          onFileLoaded={handleAccountFile}
-          loaded={!!accountFilename}
-          loadedFilename={accountFilename ?? undefined}
-          error={accountError}
+          label="portfolio.csv"
+          onFileLoaded={handlePortfolioFile}
+          loaded={!!portfolioFilename}
+          loadedFilename={portfolioFilename ?? undefined}
+          error={portfolioError}
         />
         <UploadZone
           label="transactions.csv"
@@ -100,6 +116,13 @@ export function AccountUploader({ account, label, color }: AccountUploaderProps)
           loaded={!!transactionsFilename}
           loadedFilename={transactionsFilename ?? undefined}
           error={transactionsError}
+        />
+        <UploadZone
+          label="rekening.csv (optioneel)"
+          onFileLoaded={handleAccountFile}
+          loaded={!!accountFilename}
+          loadedFilename={accountFilename ?? undefined}
+          error={accountError}
         />
       </div>
       {loaded && (
