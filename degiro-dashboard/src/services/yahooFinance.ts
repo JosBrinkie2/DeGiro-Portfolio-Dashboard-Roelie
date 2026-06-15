@@ -35,6 +35,54 @@ async function fetchYahoo(path: string): Promise<Response | null> {
   return null;
 }
 
+// Fetch a Stooq URL through CORS proxies; returns raw text response.
+async function fetchStooqText(stooqUrl: string): Promise<string | null> {
+  const encoded = encodeURIComponent(stooqUrl);
+
+  const proxies: Array<() => Promise<Response>> = [
+    () => fetch(`https://api.allorigins.win/get?url=${encoded}`).then(async (r) => {
+      if (!r.ok) throw new Error('allorigins failed');
+      const wrapper = await r.json();
+      if (!wrapper.contents) throw new Error('empty contents');
+      return new Response(wrapper.contents, { status: 200 });
+    }),
+    () => fetch(`https://corsproxy.io/?url=${encoded}`),
+    () => fetch(`https://thingproxy.freeboard.io/fetch/${stooqUrl}`),
+    () => fetch(`https://api.codetabs.com/v1/proxy?quest=${encoded}`),
+  ];
+
+  for (const attempt of proxies) {
+    try {
+      const resp = await attempt();
+      if (resp.ok) {
+        const text = await resp.text();
+        return text;
+      }
+    } catch {
+      // try next proxy
+    }
+  }
+  return null;
+}
+
+// Mapping from Yahoo Finance suffix → Stooq suffix, and the currency for that exchange.
+const YAHOO_TO_STOOQ: Record<string, { suffix: string; currency: string }> = {
+  '.AS': { suffix: '.NL', currency: 'EUR' }, // Amsterdam
+  '.DE': { suffix: '.DE', currency: 'EUR' }, // Frankfurt
+  '.TG': { suffix: '.DE', currency: 'EUR' }, // Tradegate (use Frankfurt on Stooq)
+  '.PA': { suffix: '.FR', currency: 'EUR' }, // Paris
+  '.L':  { suffix: '.UK', currency: 'GBP' }, // London
+  '.MI': { suffix: '.IT', currency: 'EUR' }, // Milan
+  '.BR': { suffix: '.BE', currency: 'EUR' }, // Brussels
+  '.LS': { suffix: '.PT', currency: 'EUR' }, // Lisbon
+  '.HE': { suffix: '.FI', currency: 'EUR' }, // Helsinki
+  '.ST': { suffix: '.SE', currency: 'SEK' }, // Stockholm
+  '.CO': { suffix: '.DK', currency: 'DKK' }, // Copenhagen
+  '.OL': { suffix: '.NO', currency: 'NOK' }, // Oslo
+  '.SW': { suffix: '.CH', currency: 'CHF' }, // Switzerland
+  '':    { suffix: '.US', currency: 'USD' }, // US exchanges
+};
+
 const MIC_TO_SUFFIX: Record<string, string> = {
   // MIC codes (Uitvoeringsplaats column — preferred)
   XAMS: '.AS', // Euronext Amsterdam
@@ -168,6 +216,49 @@ export async function fetchQuote(ticker: string): Promise<{ price: number; curre
   }
 }
 
+// Fallback: fetch a current quote from Stooq using the Yahoo ticker.
+// Converts Yahoo suffix to Stooq suffix and derives the currency from the exchange.
+export async function fetchQuoteStooq(yahooTicker: string): Promise<{ price: number; currency: string } | null> {
+  try {
+    // Detect Yahoo suffix and strip it to get the base symbol
+    let baseTicker = yahooTicker;
+    let stooqSuffix = '.US';
+    let currency = 'USD';
+
+    for (const [yahooSuffix, stooqInfo] of Object.entries(YAHOO_TO_STOOQ)) {
+      if (yahooSuffix !== '' && yahooTicker.endsWith(yahooSuffix)) {
+        baseTicker = yahooTicker.slice(0, -yahooSuffix.length);
+        stooqSuffix = stooqInfo.suffix;
+        currency = stooqInfo.currency;
+        break;
+      }
+    }
+    // If no suffix matched and the empty-string entry exists, it's a US ticker
+    if (baseTicker === yahooTicker && !yahooTicker.includes('.')) {
+      stooqSuffix = '.US';
+      currency = 'USD';
+    }
+
+    const stooqTicker = `${baseTicker}${stooqSuffix}`.toLowerCase();
+    const url = `https://stooq.com/q/l/?s=${encodeURIComponent(stooqTicker)}&f=sd2l1c1&e=csv`;
+    const text = await fetchStooqText(url);
+    if (!text) return null;
+
+    // CSV format: Symbol,Date,Open,Close,...  (first row is header)
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) return null;
+    const cols = lines[1].split(',');
+    // col index 2 = Open (l1), col index 3 = Close (c1) based on f=sd2l1c1
+    // f=sd2l1c1: s=symbol, d2=date, l1=last price, c1=change
+    const price = parseFloat(cols[2]);
+    if (isNaN(price) || price <= 0) return null;
+
+    return { price, currency };
+  } catch {
+    return null;
+  }
+}
+
 // Fetch 1-year weekly price history for sparkline
 export async function fetchHistory1Y(ticker: string): Promise<PricePoint[]> {
   const cacheKey = `${HISTORY_CACHE_KEY}_1y_${ticker}`;
@@ -250,6 +341,19 @@ export function getCachedFxRate(currency: string): number | null {
   return entry ? entry.rate : null;
 }
 
+// Fallback FX rate from Frankfurter (ECB data, native CORS, no proxy needed).
+async function fetchFxRateFrankfurter(currency: string): Promise<number | null> {
+  try {
+    const resp = await fetch(`https://api.frankfurter.app/latest?from=EUR&to=${currency}`);
+    if (!resp.ok) return null;
+    const json = await resp.json();
+    const rate: number = json?.rates?.[currency];
+    return rate > 0 ? rate : null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchFxRateToEUR(currency: string): Promise<number> {
   if (currency === 'EUR') return 1;
 
@@ -262,17 +366,30 @@ async function fetchFxRateToEUR(currency: string): Promise<number> {
     return cached.rate;
   }
 
+  // Primary: Yahoo Finance
   try {
     const ticker = `EUR${normalizedCurrency}=X`;
     const resp = await fetchYahoo(`/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`);
-    if (!resp) return 1;
-    const json = await resp.json();
-    const rate: number = json?.chart?.result?.[0]?.meta?.regularMarketPrice ?? 1;
-    fxRateCache[normalizedCurrency] = { rate, fetchedAt: Date.now() };
-    return rate;
+    if (resp) {
+      const json = await resp.json();
+      const rate: number = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (rate > 0) {
+        fxRateCache[normalizedCurrency] = { rate, fetchedAt: Date.now() };
+        return rate;
+      }
+    }
   } catch {
-    return 1;
+    // fall through to Frankfurter
   }
+
+  // Fallback: Frankfurter (ECB rates, direct CORS)
+  const frankfurterRate = await fetchFxRateFrankfurter(normalizedCurrency);
+  if (frankfurterRate) {
+    fxRateCache[normalizedCurrency] = { rate: frankfurterRate, fetchedAt: Date.now() };
+    return frankfurterRate;
+  }
+
+  return 1;
 }
 
 // Batch fetch with rate limiting (5 per batch, 300ms delay)
@@ -303,13 +420,15 @@ export async function fetchAllPrices(
             fetchHistory5Day(ticker),
           ]);
 
-          if (!quote) {
+          // Fallback: try Stooq when Yahoo quote fails
+          const resolvedQuote = quote ?? await fetchQuoteStooq(ticker);
+          if (!resolvedQuote) {
             onProgress(isin, null, 'Koers niet beschikbaar');
             return;
           }
 
-          const rawPrice = quote.price ?? 0;
-          const currency = quote.currency ?? 'EUR';
+          const rawPrice = resolvedQuote.price ?? 0;
+          const currency = resolvedQuote.currency ?? 'EUR';
           // Yahoo quotes London securities in GBp (pence) — normalize to GBP first
           const normalizedPrice = currency === 'GBp' ? rawPrice / 100 : rawPrice;
           const nativeCurrency = currency === 'GBp' ? 'GBP' : currency;
