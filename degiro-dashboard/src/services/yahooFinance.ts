@@ -5,7 +5,7 @@ import { getFromLocalStorage, saveToLocalStorage } from '../utils/localStorage';
 // Primary keys are MIC codes from the Uitvoeringsplaats column (col 5).
 // DeGiro short codes (Beurs, col 4) are kept as fallback.
 function yahooUrl(path: string): string {
-  return `https://corsproxy.io/?url=${encodeURIComponent(`https://query2.finance.yahoo.com${path}`)}`;
+  return `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query2.finance.yahoo.com${path}`)}`;
 }
 
 const MIC_TO_SUFFIX: Record<string, string> = {
