@@ -119,7 +119,7 @@ export const useAccountStore = create<AccountStoreState>((set, get) => ({
     const { roel64, roelPensioen64 } = get();
     const data = account === 'Roel64' ? roel64 : roelPensioen64;
     if (!data.loaded) return null;
-    const summary = computeAccountSummary(data.entries, account, data.transactions);
+    const summary = computeAccountSummary(data.entries, account);
     if (data.portfolioFreeCash !== null) {
       return { ...summary, freeCash: data.portfolioFreeCash };
     }

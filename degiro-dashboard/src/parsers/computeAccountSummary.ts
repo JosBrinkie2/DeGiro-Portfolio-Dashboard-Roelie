@@ -1,25 +1,26 @@
 import type { AccountEntry, AccountName, AccountSummary } from '../types/account';
-import type { Transaction } from '../types/transaction';
 
 /**
- * Compute account summary from transactions and optional account entries.
+ * Compute account summary from account entries.
  *
- * - nettoInleg: net capital deployed = -(sum of all totalEUR across transactions)
- *   buys have negative totalEUR, sells have positive — so negating gives net outflow
+ * - totalGestort: total cash deposited into the account — sum of deposit ("Storting")
+ *   mutation lines from the account file (positive amounts).
+ * - totalTerugboekingen: total cash transferred back to the bank — sum of withdrawal
+ *   ("Terugboeking") mutation lines, expressed as a positive figure.
+ * - nettoInleg: net capital deployed = totalGestort − totalTerugboekingen.
  * - freeCash: most recent EUR balance from account entries (overridden by Portfolio CSV in the store)
  */
 export function computeAccountSummary(
   entries: AccountEntry[],
   account: AccountName,
-  transactions: Transaction[] = [],
 ): AccountSummary {
-  const totalGestort = transactions
-    .filter((t) => t.quantity > 0)
-    .reduce((sum, t) => sum + Math.abs(t.totalEUR), 0);
+  const totalGestort = entries
+    .filter((e) => e.entryType === 'deposit')
+    .reduce((sum, e) => sum + e.mutationAmount, 0);
 
-  const totalTerugboekingen = transactions
-    .filter((t) => t.quantity < 0)
-    .reduce((sum, t) => sum + t.totalEUR, 0);
+  const totalTerugboekingen = entries
+    .filter((e) => e.entryType === 'withdrawal')
+    .reduce((sum, e) => sum + Math.abs(e.mutationAmount), 0);
 
   const nettoInleg = totalGestort - totalTerugboekingen;
 

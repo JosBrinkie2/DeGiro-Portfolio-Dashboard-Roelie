@@ -84,14 +84,14 @@ export function AccountSummaryCard({ summary, pricesLoading, color }: AccountSum
           iconColor="bg-green-50"
           label="Totaal gestort"
           value={formatEuro(summary.totalGestort)}
-          sub="Totaal geïnvesteerd"
+          sub="Stortingen op rekening"
         />
         <Metric
           icon={<ArrowDownCircle className="h-4 w-4 text-orange-500" />}
           iconColor="bg-orange-50"
           label="Terugboekingen"
           value={formatEuro(summary.totalTerugboekingen)}
-          sub="Ontvangen uit verkopen"
+          sub="Opnames naar bank"
         />
         <div className="flex items-start gap-3">
           <div className="mt-0.5 rounded-lg p-2 bg-blue-50">

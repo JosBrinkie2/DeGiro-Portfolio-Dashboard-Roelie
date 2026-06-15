@@ -65,11 +65,12 @@ resultaat %      = totaal resultaat / netto inleg × 100`}
         </pre>
         <ul className="list-disc pl-5 text-sm space-y-1">
           <li>
-            <strong>Gestort</strong>: alle EUR-stortingen op de DeGiro-rekening (positieve
-            mutatieregels in het rekeningbestand).
+            <strong>Gestort</strong>: de optelsom van alle <em>Storting</em>-regels in het
+            rekeningbestand (geld dat op de DeGiro-rekening is gestort).
           </li>
           <li>
-            <strong>Terugboekingen</strong>: alle opnames van de rekening (negatieve mutatieregels).
+            <strong>Terugboekingen</strong>: de optelsom van alle <em>Terugboeking</em>-regels
+            (geld dat van de rekening is opgenomen naar de bank).
           </li>
           <li>
             <strong>Vrije ruimte</strong>: het actuele cashsaldo zoals vermeld in het
