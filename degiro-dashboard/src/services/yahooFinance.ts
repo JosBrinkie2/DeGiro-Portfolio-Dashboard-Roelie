@@ -6,31 +6,54 @@ import { getFromLocalStorage, saveToLocalStorage } from '../utils/localStorage';
 // DeGiro short codes (Beurs, col 4) are kept as fallback.
 const YAHOO_BASE = 'https://query2.finance.yahoo.com';
 
-// Try multiple CORS proxies in order; return the first successful Response.
+const PROXY_TIMEOUT_MS = 8000;
+
+// Race all CORS proxies in parallel; return the first successful Response.
 async function fetchYahoo(path: string): Promise<Response | null> {
   const target = `${YAHOO_BASE}${path}`;
-  const proxies: Array<() => Promise<Response>> = [
-    // allorigins /get wraps JSON in {contents, status} — handled below
-    () => fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(target)}`).then(async (r) => {
-      if (!r.ok) throw new Error('allorigins failed');
-      const wrapper = await r.json();
-      if (!wrapper.contents) throw new Error('empty contents');
-      return new Response(wrapper.contents, { status: 200, headers: { 'Content-Type': 'application/json' } });
-    }),
-    () => fetch(`https://corsproxy.io/?url=${encodeURIComponent(target)}`),
-    () => fetch(`https://thingproxy.freeboard.io/fetch/${target}`),
-    () => fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(target)}`),
+
+  function timed(attempt: () => Promise<Response>): Promise<Response> {
+    return attempt().then((resp) => {
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return resp;
+    });
+  }
+
+  const controllers = [new AbortController(), new AbortController(), new AbortController(), new AbortController()];
+  const timer = setTimeout(() => controllers.forEach((c) => c.abort()), PROXY_TIMEOUT_MS);
+
+  const attempts: Array<Promise<Response>> = [
+    // allorigins /get wraps the body in {contents, status} JSON
+    timed(() =>
+      fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(target)}`, { signal: controllers[0].signal })
+        .then(async (r) => {
+          if (!r.ok) throw new Error('allorigins outer failed');
+          const wrapper = await r.json();
+          const code: number = wrapper.status?.http_code ?? 200;
+          if (!wrapper.contents || code >= 400) throw new Error(`allorigins inner ${code}`);
+          return new Response(wrapper.contents, { status: 200, headers: { 'Content-Type': 'application/json' } });
+        })
+    ),
+    timed(() =>
+      fetch(`https://corsproxy.io/?url=${encodeURIComponent(target)}`, { signal: controllers[1].signal })
+    ),
+    timed(() =>
+      fetch(`https://thingproxy.freeboard.io/fetch/${target}`, { signal: controllers[2].signal })
+    ),
+    timed(() =>
+      fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(target)}`, { signal: controllers[3].signal })
+    ),
   ];
 
-  for (const attempt of proxies) {
-    try {
-      const resp = await attempt();
-      if (resp.ok) return resp;
-    } catch {
-      // try next proxy
-    }
+  try {
+    const resp = await Promise.any(attempts);
+    clearTimeout(timer);
+    controllers.forEach((c) => c.abort()); // cancel remaining in-flight requests
+    return resp;
+  } catch {
+    clearTimeout(timer);
+    return null;
   }
-  return null;
 }
 
 const MIC_TO_SUFFIX: Record<string, string> = {
