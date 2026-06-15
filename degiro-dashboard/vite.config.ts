@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/degiro-portfolio-dashboard-roelie/',
+  base: '/DeGiro-Portfolio-Dashboard-Roelie/',
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
