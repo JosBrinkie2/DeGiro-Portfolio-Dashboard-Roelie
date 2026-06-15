@@ -18,6 +18,11 @@ interface PriceStoreState {
   prices: Record<string, PriceData>; // keyed by ISIN
   setLoading: (isin: string) => void;
   setPriceData: (isin: string, data: Omit<PriceData, 'loading' | 'error' | 'lastFetched'>) => void;
+  // Phase A: quote only. Preserves any existing history so the row paints the
+  // price immediately without clobbering a previously-loaded sparkline.
+  setQuoteData: (isin: string, data: Pick<PriceData, 'ticker' | 'nativeCurrency' | 'nativePriceRaw' | 'currentPriceEUR'>) => void;
+  // Phase B: history/trend only. Never touches price or loading state.
+  setHistoryData: (isin: string, data: Pick<PriceData, 'history1Y' | 'history5Day' | 'trend5Day'>) => void;
   setError: (isin: string, error: string) => void;
 }
 
@@ -59,6 +64,33 @@ export const usePriceStore = create<PriceStoreState>((set) => ({
           lastFetched: Date.now(),
           loading: false,
           error: null,
+        },
+      },
+    })),
+
+  setQuoteData: (isin, data) =>
+    set((state) => ({
+      prices: {
+        ...state.prices,
+        [isin]: {
+          ...DEFAULT_PRICE_DATA,
+          ...state.prices[isin],
+          ...data,
+          lastFetched: Date.now(),
+          loading: false,
+          error: null,
+        },
+      },
+    })),
+
+  setHistoryData: (isin, data) =>
+    set((state) => ({
+      prices: {
+        ...state.prices,
+        [isin]: {
+          ...DEFAULT_PRICE_DATA,
+          ...state.prices[isin],
+          ...data,
         },
       },
     })),
