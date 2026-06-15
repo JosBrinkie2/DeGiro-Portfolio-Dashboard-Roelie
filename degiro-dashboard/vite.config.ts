@@ -4,12 +4,12 @@ import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/degiro-portfolio-dashboard-roelie/',
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      // Proxy Yahoo Finance API calls to avoid CORS issues
       '/api/yahoo': {
-        target: 'https://query1.finance.yahoo.com',
+        target: 'https://query2.finance.yahoo.com',
         changeOrigin: true,
         rewrite: (path) => path.replace('/api/yahoo', ''),
       },
