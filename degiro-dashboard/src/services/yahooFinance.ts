@@ -81,7 +81,7 @@ export async function resolveTicker(isin: string, exchange: string, productName?
   async function searchYahoo(query: string): Promise<string | null> {
     try {
       const resp = await fetch(
-        `/api/yahoo/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=5&newsCount=0`
+        `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=5&newsCount=0`
       );
       if (!resp.ok) return null;
       const json = await resp.json();
@@ -127,7 +127,7 @@ export async function resolveTicker(isin: string, exchange: string, productName?
 export async function fetchQuote(ticker: string): Promise<{ price: number; currency: string } | null> {
   try {
     const resp = await fetch(
-      `/api/yahoo/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`
+      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`
     );
     if (!resp.ok) return null;
     const json = await resp.json();
@@ -151,7 +151,7 @@ export async function fetchHistory1Y(ticker: string): Promise<PricePoint[]> {
 
   try {
     const resp = await fetch(
-      `/api/yahoo/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1wk&range=1y`
+      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1wk&range=1y`
     );
     if (!resp.ok) return [];
     const json = await resp.json();
@@ -185,7 +185,7 @@ export async function fetchHistory5Day(ticker: string): Promise<PricePoint[]> {
 
   try {
     const resp = await fetch(
-      `/api/yahoo/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d`
+      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d`
     );
     if (!resp.ok) return [];
     const json = await resp.json();
@@ -242,7 +242,7 @@ async function fetchFxRateToEUR(currency: string): Promise<number> {
   try {
     const ticker = `EUR${normalizedCurrency}=X`;
     const resp = await fetch(
-      `/api/yahoo/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`
+      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`
     );
     if (!resp.ok) return 1;
     const json = await resp.json();

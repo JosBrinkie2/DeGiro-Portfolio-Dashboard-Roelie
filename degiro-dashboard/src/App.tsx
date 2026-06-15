@@ -6,6 +6,7 @@ import { PortfolioPage } from './pages/PortfolioPage';
 import { BankPage } from './pages/BankPage';
 import { UploadPage } from './pages/UploadPage';
 import { useAccountStore } from './store/useAccountStore';
+import { useAutoLoad } from './hooks/useAutoLoad';
 
 type Page = 'dashboard' | 'portfolio' | 'bank' | 'upload';
 
@@ -17,6 +18,7 @@ const NAV_ITEMS: Array<{ id: Page; label: string; icon: React.FC<{ className?: s
 ];
 
 export default function App() {
+  useAutoLoad();
   const [page, setPage] = useState<Page>('dashboard');
   const roel64Loaded = useAccountStore((s) => s.roel64.loaded);
   const roelPensLoaded = useAccountStore((s) => s.roelPensioen64.loaded);
