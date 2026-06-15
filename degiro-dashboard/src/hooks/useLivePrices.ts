@@ -43,9 +43,9 @@ export function useLivePrices() {
     // Mark all stale ISINs as loading
     staleIsins.forEach(({ isin }) => setLoading(isin));
 
-    fetchAllPrices(staleIsins, (isin, data) => {
+    fetchAllPrices(staleIsins, (isin, data, errorReason) => {
       if (!data) {
-        setError(isin, 'Kon koers niet ophalen');
+        setError(isin, errorReason ?? 'Kon koers niet ophalen');
         return;
       }
       const trend5Day = calc5DayTrend(data.history5Day);
