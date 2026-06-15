@@ -4,6 +4,10 @@ import { getFromLocalStorage, saveToLocalStorage } from '../utils/localStorage';
 // Exchange code to Yahoo Finance suffix mapping.
 // Primary keys are MIC codes from the Uitvoeringsplaats column (col 5).
 // DeGiro short codes (Beurs, col 4) are kept as fallback.
+function yahooUrl(path: string): string {
+  return `https://corsproxy.io/?url=${encodeURIComponent(`https://query2.finance.yahoo.com${path}`)}`;
+}
+
 const MIC_TO_SUFFIX: Record<string, string> = {
   // MIC codes (Uitvoeringsplaats column — preferred)
   XAMS: '.AS', // Euronext Amsterdam
@@ -81,7 +85,7 @@ export async function resolveTicker(isin: string, exchange: string, productName?
   async function searchYahoo(query: string): Promise<string | null> {
     try {
       const resp = await fetch(
-        `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=5&newsCount=0`
+        yahooUrl(`/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=5&newsCount=0`)
       );
       if (!resp.ok) return null;
       const json = await resp.json();
@@ -127,7 +131,7 @@ export async function resolveTicker(isin: string, exchange: string, productName?
 export async function fetchQuote(ticker: string): Promise<{ price: number; currency: string } | null> {
   try {
     const resp = await fetch(
-      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`
+      yahooUrl(`/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`)
     );
     if (!resp.ok) return null;
     const json = await resp.json();
@@ -151,7 +155,7 @@ export async function fetchHistory1Y(ticker: string): Promise<PricePoint[]> {
 
   try {
     const resp = await fetch(
-      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1wk&range=1y`
+      yahooUrl(`/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1wk&range=1y`)
     );
     if (!resp.ok) return [];
     const json = await resp.json();
@@ -185,7 +189,7 @@ export async function fetchHistory5Day(ticker: string): Promise<PricePoint[]> {
 
   try {
     const resp = await fetch(
-      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d`
+      yahooUrl(`/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d`)
     );
     if (!resp.ok) return [];
     const json = await resp.json();
@@ -242,7 +246,7 @@ async function fetchFxRateToEUR(currency: string): Promise<number> {
   try {
     const ticker = `EUR${normalizedCurrency}=X`;
     const resp = await fetch(
-      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`
+      yahooUrl(`/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`)
     );
     if (!resp.ok) return 1;
     const json = await resp.json();
