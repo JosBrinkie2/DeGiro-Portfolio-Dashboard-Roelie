@@ -19,7 +19,7 @@ async function fetchYahoo(path: string): Promise<Response | null> {
     });
   }
 
-  const controllers = [new AbortController(), new AbortController(), new AbortController(), new AbortController()];
+  const controllers = [new AbortController(), new AbortController()];
   const timer = setTimeout(() => controllers.forEach((c) => c.abort()), PROXY_TIMEOUT_MS);
 
   const attempts: Array<Promise<Response>> = [
@@ -36,12 +36,6 @@ async function fetchYahoo(path: string): Promise<Response | null> {
     ),
     timed(() =>
       fetch(`https://corsproxy.io/?url=${encodeURIComponent(target)}`, { signal: controllers[1].signal })
-    ),
-    timed(() =>
-      fetch(`https://thingproxy.freeboard.io/fetch/${target}`, { signal: controllers[2].signal })
-    ),
-    timed(() =>
-      fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(target)}`, { signal: controllers[3].signal })
     ),
   ];
 
@@ -90,7 +84,7 @@ const MIC_TO_SUFFIX: Record<string, string> = {
   EPA:  '.PA',
 };
 
-const TICKER_CACHE_KEY = 'ticker_cache_v1';
+const TICKER_CACHE_KEY = 'ticker_cache_v2';
 const HISTORY_CACHE_KEY = 'history_cache_v1';
 const CACHE_TTL_PRICE = 5 * 60 * 1000;       // 5 minutes
 const CACHE_TTL_HISTORY = 60 * 60 * 1000;    // 1 hour
@@ -110,24 +104,15 @@ export interface QuoteResult {
 // Resolve a ticker symbol for an ISIN.
 // Strategy:
 //   1. Return cached ticker if available.
-//   2. Try the ISIN+suffix candidate directly against Yahoo Finance chart API.
-//   3. If that fails, search Yahoo by ISIN and pick the result matching the expected suffix.
-//   4. If that fails and a product name is available, search Yahoo by name.
-//   5. Last resort: return the candidate ticker as-is.
+//   2. Search Yahoo by ISIN and pick the result matching the expected exchange suffix.
+//   3. If that fails and a product name is available, search Yahoo by name.
+//   4. Last resort: return ISIN+suffix as-is (not cached — will retry next time).
 export async function resolveTicker(isin: string, exchange: string, productName?: string): Promise<string> {
   const cache = getFromLocalStorage<Record<string, string>>(TICKER_CACHE_KEY) ?? {};
   if (cache[isin]) return cache[isin];
 
   const suffix = MIC_TO_SUFFIX[exchange?.toUpperCase()] ?? '';
   const candidate = `${isin}${suffix}`;
-
-  // Step 2: probe the candidate ticker directly
-  const probeResult = await fetchQuote(candidate);
-  if (probeResult) {
-    cache[isin] = candidate;
-    saveToLocalStorage(TICKER_CACHE_KEY, cache);
-    return candidate;
-  }
 
   // Helper: search Yahoo Finance and return the best matching ticker
   async function searchYahoo(query: string): Promise<string | null> {
@@ -149,7 +134,7 @@ export async function resolveTicker(isin: string, exchange: string, productName?
     }
   }
 
-  // Step 3: search by ISIN
+  // Step 2: search by ISIN
   const isinMatch = await searchYahoo(isin);
   if (isinMatch) {
     cache[isin] = isinMatch;
@@ -157,7 +142,7 @@ export async function resolveTicker(isin: string, exchange: string, productName?
     return isinMatch;
   }
 
-  // Step 4: search by product name (fallback for ISINs Yahoo doesn't know)
+  // Step 3: search by product name (fallback for ISINs Yahoo doesn't know)
   if (productName) {
     const nameMatch = await searchYahoo(productName);
     if (nameMatch) {
@@ -167,9 +152,7 @@ export async function resolveTicker(isin: string, exchange: string, productName?
     }
   }
 
-  // Step 5: use candidate as last resort
-  cache[isin] = candidate;
-  saveToLocalStorage(TICKER_CACHE_KEY, cache);
+  // Step 4: last resort — do NOT cache so resolution retries on next load
   return candidate;
 }
 
@@ -308,8 +291,8 @@ export async function fetchAllPrices(
     history5Day: PricePoint[];
   } | null) => void
 ): Promise<void> {
-  const BATCH_SIZE = 5;
-  const DELAY = 300;
+  const BATCH_SIZE = 2;
+  const DELAY = 600;
 
   for (let i = 0; i < isins.length; i += BATCH_SIZE) {
     const batch = isins.slice(i, i + BATCH_SIZE);
